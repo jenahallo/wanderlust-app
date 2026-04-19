@@ -10,6 +10,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -566,34 +568,31 @@
   .info-row-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
   .info-row-value { font-size: 14px; font-weight: 500; color: var(--text); }
 
-  /* Map preview */
-  .map-preview {
+  /* Map */
+  #detailMap {
     border-radius: 16px;
     overflow: hidden;
     margin-top: 20px;
-    height: 140px;
-    background: #d4e6c3;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    position: relative;
+    height: 180px;
+    z-index: 0;
   }
-  .map-preview svg { opacity: 0.5; }
-  .map-pin { position: absolute; font-size: 28px; }
-  .map-label {
-    position: absolute;
-    bottom: 10px;
-    left: 50%;
-    transform: translateX(-50%);
+  .leaflet-container { font-family: inherit; }
+  .open-map-btn {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    padding: 11px;
     background: var(--green);
     color: #fff;
-    font-size: 12px;
+    border: none;
+    border-radius: 12px;
+    font-size: 14px;
     font-weight: 600;
-    padding: 5px 14px;
-    border-radius: 20px;
-    white-space: nowrap;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: center;
   }
+  .open-map-btn:active { opacity: 0.85; }
 
   /* ── BOTTOM NAV ── */
   .bottom-nav {
@@ -820,16 +819,8 @@
           <div class="detail-pills" id="detailPills"></div>
           <div class="detail-desc" id="detailDesc"></div>
           <div class="info-rows" id="detailInfoRows"></div>
-          <div class="map-preview" id="mapPreview" onclick="openMap()">
-            <svg width="100%" height="100%" viewBox="0 0 353 140" fill="none">
-              <rect width="353" height="140" fill="#d4e6c3"/>
-              <path d="M0 70 Q88 40 176 70 Q264 100 353 70" stroke="#a8c090" stroke-width="2" fill="none"/>
-              <path d="M0 90 Q88 60 176 90 Q264 120 353 90" stroke="#a8c090" stroke-width="1.5" fill="none"/>
-              <path d="M0 50 Q88 20 176 50 Q264 80 353 50" stroke="#a8c090" stroke-width="1.5" fill="none"/>
-            </svg>
-            <span class="map-pin">📍</span>
-            <div class="map-label">Open in Maps</div>
-          </div>
+          <div id="detailMap"></div>
+          <button class="open-map-btn" onclick="openMap()">🗺 Open in OpenStreetMap</button>
         </div>
         <div class="bottom-nav">
           <button class="nav-btn" onclick="navigateTo('home')">
@@ -1117,7 +1108,7 @@ function topCardHTML(p, i) {
   const imgSrc = p.img || placeholderImg(p.hue || 35, 200, 140);
   const tag = topTag(p);
   return `
-    <div class="top-card" onclick="openDetail('${esc(p.xid)}','top')">
+    <div class="top-card" data-xid="${esc(p.xid)}" data-kind="top">
       <img class="top-card-img" src="${imgSrc}" alt="${esc(p.name)}" onerror="this.src='${placeholderImg(p.hue||35,200,140)}'">
       <div class="top-card-body">
         <div class="top-card-rank">#${i+1} of 10</div>
@@ -1130,11 +1121,11 @@ function topCardHTML(p, i) {
     </div>`;
 }
 
-function listRowHTML(p, i) {
+function listRowHTML(p, i, kind = 'top') {
   const imgSrc = p.img || placeholderImg(p.hue || 35, 56, 56);
-  const tag = topTag(p);
+  const tag = kind === 'hidden' ? hiddenTag(p).replace(/^.\s/,'') : topTag(p);
   return `
-    <div class="place-row" onclick="openDetail('${esc(p.xid)}','top')">
+    <div class="place-row" data-xid="${esc(p.xid)}" data-kind="${kind}">
       <img class="place-row-img" src="${imgSrc}" alt="${esc(p.name)}" onerror="this.src='${placeholderImg(p.hue||35,56,56)}'">
       <div class="place-row-info">
         <div class="place-row-name">${esc(p.name)}</div>
@@ -1149,7 +1140,7 @@ function renderHiddenSection() {
   const places = state.hiddenPlaces;
   if (!places.length) return '<div class="loading-state"><div>No hidden gems found.</div></div>';
 
-  const rows = places.slice(0, 5).map(p => listRowHTML(p, 0)).join('');
+  const rows = places.slice(0, 5).map(p => listRowHTML(p, 0, 'hidden')).join('');
   const grid = places.slice(5, 10).map(p => hiddenCardHTML(p)).join('');
 
   return `
@@ -1167,7 +1158,7 @@ function hiddenCardHTML(p) {
   const imgSrc = p.img || placeholderImg(p.hue || 170, 160, 213);
   const tag = hiddenTag(p);
   return `
-    <div class="hidden-card" onclick="openDetail('${esc(p.xid)}','hidden')">
+    <div class="hidden-card" data-xid="${esc(p.xid)}" data-kind="hidden">
       <img src="${imgSrc}" alt="${esc(p.name)}" onerror="this.src='${placeholderImg(p.hue||170,160,213)}'">
       <div class="hidden-card-overlay">
         <div class="hidden-card-name">${esc(p.name)}</div>
@@ -1176,26 +1167,46 @@ function hiddenCardHTML(p) {
     </div>`;
 }
 
+// ── EVENT DELEGATION FOR RESULT CARDS ────────────────────────────────────────
+document.getElementById('resultsContent').addEventListener('click', e => {
+  const el = e.target.closest('[data-xid]');
+  if (!el) return;
+  openDetail(el.dataset.xid, el.dataset.kind);
+});
+
 // ── DETAIL ───────────────────────────────────────────────────────────────────
+let leafletMap = null;
+let leafletMarker = null;
+
 function openDetail(xid, kind) {
   const list = kind === 'top' ? state.topPlaces : state.hiddenPlaces;
-  const place = list.find(p => p.xid === xid);
-  if (!place) return;
-  state.activePlace = place;
-  state.activeKind = kind;
-  renderDetail(place);
+  const place = list.find(p => String(p.xid) === String(xid));
+  if (!place) {
+    // fallback: search both lists
+    const fallback = [...state.topPlaces, ...state.hiddenPlaces].find(p => String(p.xid) === String(xid));
+    if (!fallback) return;
+    kind = state.topPlaces.includes(fallback) ? 'top' : 'hidden';
+    state.activePlace = fallback;
+    state.activeKind = kind;
+    renderDetail(fallback, kind);
+  } else {
+    state.activePlace = place;
+    state.activeKind = kind;
+    renderDetail(place, kind);
+  }
   navigateTo('detail');
 }
 
-function renderDetail(p) {
+function renderDetail(p, kind) {
+  kind = kind || state.activeKind;
   const imgSrc = p.img || placeholderImg(p.hue || 35, 393, 260);
   document.getElementById('detailHeroImg').src = imgSrc;
   document.getElementById('detailHeroImg').onerror = function() { this.src = placeholderImg(p.hue||35,393,260); };
   document.getElementById('detailName').textContent = p.name || '';
-  document.getElementById('detailBadge').textContent = topTag(p);
+  document.getElementById('detailBadge').textContent = kind === 'hidden' ? hiddenTag(p).replace(/^.\s/,'') : topTag(p);
 
   // Save button
-  const saved = state.saved.has(p.xid);
+  const saved = state.saved.has(String(p.xid));
   const saveBtn = document.getElementById('saveBtn');
   saveBtn.textContent = saved ? '♥' : '♡';
   saveBtn.classList.toggle('saved', saved);
@@ -1213,11 +1224,13 @@ function renderDetail(p) {
 
   // Info rows
   const rows = [];
-  if (p.address?.city || p.address?.town) rows.push(['📍', 'Location', [p.address?.road, p.address?.city || p.address?.town].filter(Boolean).join(', ')]);
+  if (p.address?.road || p.address?.city || p.address?.town) {
+    rows.push(['📍', 'Location', esc([p.address?.road, p.address?.city || p.address?.town].filter(Boolean).join(', '))]);
+  }
   if (p.url) rows.push(['🔗', 'Website', `<a href="${esc(p.url)}" target="_blank" style="color:var(--green)">${esc(p.url.replace(/^https?:\/\//,''))}</a>`]);
-  if (p.wikipedia) rows.push(['📖', 'Wikipedia', `<a href="${esc(p.wikipedia)}" target="_blank" style="color:var(--green)">Read more</a>`]);
+  if (p.wikipedia) rows.push(['📖', 'Wikipedia', `<a href="${esc(p.wikipedia)}" target="_blank" style="color:var(--green)">Read article →</a>`]);
   rows.push(['🕐', 'Best time', kind === 'hidden' ? 'Early morning or late afternoon' : 'Morning for fewer crowds']);
-  rows.push(['⭐', 'Category', formatKind(p.kinds)]);
+  rows.push(['⭐', 'Category', esc(formatKind(p.kinds))]);
 
   document.getElementById('detailInfoRows').innerHTML = rows.map(([icon, label, val]) => `
     <div class="info-row">
@@ -1227,18 +1240,60 @@ function renderDetail(p) {
         <div class="info-row-value">${val}</div>
       </div>
     </div>`).join('');
+
+  // Store coords for map (use place point, fall back to city coords)
+  const lat = p.point?.lat || state.coords.lat;
+  const lon = p.point?.lon || state.coords.lon;
+  state._detailLat = lat;
+  state._detailLon = lon;
+  state._detailName = p.name;
+}
+
+function initLeafletMap(lat, lon, name) {
+  const container = document.getElementById('detailMap');
+  if (!container) return;
+
+  if (!leafletMap) {
+    leafletMap = L.map('detailMap', {
+      zoomControl: true,
+      attributionControl: true,
+      scrollWheelZoom: false,
+    }).setView([lat, lon], 15);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://openstreetmap.org">OSM</a>',
+      maxZoom: 19,
+    }).addTo(leafletMap);
+  } else {
+    leafletMap.setView([lat, lon], 15);
+    if (leafletMarker) leafletMap.removeLayer(leafletMarker);
+  }
+
+  const goldIcon = L.divIcon({
+    html: '<div style="font-size:28px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4))">📍</div>',
+    className: '',
+    iconAnchor: [14, 28],
+  });
+
+  leafletMarker = L.marker([lat, lon], { icon: goldIcon })
+    .addTo(leafletMap)
+    .bindPopup(`<b>${name}</b>`)
+    .openPopup();
+
+  setTimeout(() => leafletMap.invalidateSize(), 120);
 }
 
 function toggleSave() {
   const p = state.activePlace;
   if (!p) return;
-  if (state.saved.has(p.xid)) {
-    state.saved.delete(p.xid);
+  const xid = String(p.xid);
+  if (state.saved.has(xid)) {
+    state.saved.delete(xid);
     document.getElementById('saveBtn').textContent = '♡';
     document.getElementById('saveBtn').classList.remove('saved');
     showToast('Removed from saved');
   } else {
-    state.saved.add(p.xid);
+    state.saved.add(xid);
     document.getElementById('saveBtn').textContent = '♥';
     document.getElementById('saveBtn').classList.add('saved');
     showToast('Saved!');
@@ -1247,10 +1302,8 @@ function toggleSave() {
 }
 
 function openMap() {
-  const p = state.activePlace;
-  const lat = p?.point?.lat || state.coords.lat;
-  const lon = p?.point?.lon || state.coords.lon;
-  const name = p?.name || state.destination;
+  const lat = state._detailLat || state.coords.lat;
+  const lon = state._detailLon || state.coords.lon;
   window.open(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}&zoom=16&layers=M`, '_blank');
 }
 
@@ -1260,17 +1313,13 @@ function navigateTo(screenId) {
   document.getElementById(screenId).classList.add('active');
   state.screen = screenId;
 
-  // Update status bar color
   const sb = document.getElementById('statusBar');
-  if (screenId === 'home') {
-    sb.style.background = '#2d4a2d';
-    sb.style.color = '#fff';
-  } else if (screenId === 'results') {
-    sb.style.background = '#2d4a2d';
-    sb.style.color = '#fff';
-  } else {
-    sb.style.background = 'transparent';
-    sb.style.color = '#fff';
+  sb.style.background = screenId === 'detail' ? 'transparent' : '#2d4a2d';
+  sb.style.color = '#fff';
+
+  if (screenId === 'detail' && state._detailLat) {
+    // Init map after screen is visible so Leaflet can measure the container
+    setTimeout(() => initLeafletMap(state._detailLat, state._detailLon, state._detailName), 50);
   }
 }
 

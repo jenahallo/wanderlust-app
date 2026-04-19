@@ -984,11 +984,35 @@ async function fetchPOIDetail(xid) {
 async function fetchUnsplashPhoto(query) {
   if (CONFIG.UNSPLASH_KEY === 'YOUR_UNSPLASH_KEY') return null;
   try {
-    const r = await fetch(`https://api.unsplash.com/photos/random?query=${encodeURIComponent(query)}&orientation=landscape&client_id=${CONFIG.UNSPLASH_KEY}`);
+    const r = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape&client_id=${CONFIG.UNSPLASH_KEY}`);
     if (!r.ok) return null;
     const d = await r.json();
-    return d.urls?.regular || null;
+    return d.results?.[0]?.urls?.regular || null;
   } catch { return null; }
+}
+
+async function fetchWikimediaPhoto(placeName) {
+  try {
+    const url = `https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&titles=${encodeURIComponent(placeName)}&format=json&pithumbsize=600&origin=*`;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const d = await r.json();
+    const page = Object.values(d?.query?.pages || {})[0];
+    return page?.thumbnail?.source || null;
+  } catch { return null; }
+}
+
+async function getPlacePhoto(name, city, kinds) {
+  // 1. Specific name + city on Unsplash
+  let url = await fetchUnsplashPhoto(`${name} ${city}`);
+  if (url) return url;
+  // 2. Wikipedia thumbnail
+  url = await fetchWikimediaPhoto(name);
+  if (url) return url;
+  // 3. Broader: category + city on Unsplash
+  const category = (kinds || 'landmark').split(',')[0].replace(/_/g, ' ');
+  url = await fetchUnsplashPhoto(`${category} ${city}`);
+  return url;
 }
 
 async function fetchWeather(lat, lon) {
@@ -1024,13 +1048,13 @@ async function doSearch(query) {
 
     const enrichTop = await Promise.all(topRaw.slice(0, 10).map(async (p, i) => {
       const detail = await fetchPOIDetail(p.xid);
-      const imgUrl = await fetchUnsplashPhoto(`${p.name} ${state.destination}`);
+      const imgUrl = await getPlacePhoto(p.name, state.destination, p.kinds);
       return { ...p, ...(detail || {}), img: imgUrl, hue: HUES[i % HUES.length] };
     }));
 
     const enrichHidden = await Promise.all(hiddenRaw.slice(0, 10).map(async (p, i) => {
       const detail = await fetchPOIDetail(p.xid);
-      const imgUrl = await fetchUnsplashPhoto(`${p.name} ${state.destination} hidden`);
+      const imgUrl = await getPlacePhoto(p.name, state.destination, p.kinds);
       return { ...p, ...(detail || {}), img: imgUrl, hue: HUES[(i + 5) % HUES.length] };
     }));
 
@@ -1174,6 +1198,18 @@ document.getElementById('resultsContent').addEventListener('click', e => {
   openDetail(el.dataset.xid, el.dataset.kind);
 });
 
+// ── HELPERS: DESCRIPTION ─────────────────────────────────────────────────────
+function getDescription(p) {
+  const raw = p.wikipedia_extracts?.text || p.info?.descr || '';
+  if (raw.trim()) {
+    const sentences = raw.match(/[^.!?]+[.!?]+/g) || [];
+    const two = sentences.slice(0, 2).join(' ').trim();
+    return two || raw.slice(0, 240) + '…';
+  }
+  const kind = formatKind(p.kinds).toLowerCase();
+  return `${p.name || 'This place'} is a remarkable ${kind} and one of the standout attractions in ${state.destination}. It offers visitors a genuine taste of local culture and history that should not be missed.`;
+}
+
 // ── DETAIL ───────────────────────────────────────────────────────────────────
 let leafletMap = null;
 let leafletMarker = null;
@@ -1202,6 +1238,12 @@ function renderDetail(p, kind) {
   const imgSrc = p.img || placeholderImg(p.hue || 35, 393, 260);
   document.getElementById('detailHeroImg').src = imgSrc;
   document.getElementById('detailHeroImg').onerror = function() { this.src = placeholderImg(p.hue||35,393,260); };
+  // If no photo was fetched during search, try on demand now
+  if (!p.img) {
+    getPlacePhoto(p.name, state.destination, p.kinds).then(url => {
+      if (url) { p.img = url; document.getElementById('detailHeroImg').src = url; }
+    });
+  }
   document.getElementById('detailName').textContent = p.name || '';
   document.getElementById('detailBadge').textContent = kind === 'hidden' ? hiddenTag(p).replace(/^.\s/,'') : topTag(p);
 
@@ -1218,9 +1260,8 @@ function renderDetail(p, kind) {
   if (p.point?.lat) pills.push(`📍 ${p.point.lat.toFixed(3)}, ${p.point.lon.toFixed(3)}`);
   document.getElementById('detailPills').innerHTML = pills.map(t => `<div class="detail-pill">${esc(t)}</div>`).join('');
 
-  // Description
-  const desc = p.wikipedia_extracts?.text || p.info?.descr || 'A wonderful place worth visiting.';
-  document.getElementById('detailDesc').textContent = desc;
+  // Description — 2 sentences from Wikipedia extract, or generic fallback
+  document.getElementById('detailDesc').textContent = getDescription(p);
 
   // Info rows
   const rows = [];
@@ -1229,6 +1270,8 @@ function renderDetail(p, kind) {
   }
   if (p.url) rows.push(['🔗', 'Website', `<a href="${esc(p.url)}" target="_blank" style="color:var(--green)">${esc(p.url.replace(/^https?:\/\//,''))}</a>`]);
   if (p.wikipedia) rows.push(['📖', 'Wikipedia', `<a href="${esc(p.wikipedia)}" target="_blank" style="color:var(--green)">Read article →</a>`]);
+  const admissionText = p.admission ? p.admission : (p.url ? 'Check official website for pricing' : 'Free entry');
+  rows.push(['🎫', 'Admission', esc(admissionText)]);
   rows.push(['🕐', 'Best time', kind === 'hidden' ? 'Early morning or late afternoon' : 'Morning for fewer crowds']);
   rows.push(['⭐', 'Category', esc(formatKind(p.kinds))]);
 

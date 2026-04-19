@@ -1016,39 +1016,52 @@ async function fetchPOIDetail(xid) {
   return r.json();
 }
 
-async function fetchUnsplashPhoto(query) {
-  if (CONFIG.UNSPLASH_KEY === 'YOUR_UNSPLASH_KEY') return null;
+// ── PHOTO CHAIN ──────────────────────────────────────────────────────────────
+// Step 2: Wikipedia REST summary
+async function _wikiSummaryPhoto(name) {
   try {
-    const r = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape&client_id=${CONFIG.UNSPLASH_KEY}`);
-    if (!r.ok) return null;
-    const d = await r.json();
-    return d.results?.[0]?.urls?.regular || null;
-  } catch { return null; }
-}
-
-async function fetchWikipediaPhoto(placeName) {
-  try {
-    const slug = encodeURIComponent(placeName.trim().replace(/\s+/g, '_'));
-    const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${slug}`, {
-      headers: { 'Accept': 'application/json' },
-    });
+    const slug = encodeURIComponent(name.trim().replace(/\s+/g, '_'));
+    const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${slug}`, { headers: { Accept: 'application/json' } });
     if (!r.ok) return null;
     const d = await r.json();
     return d.thumbnail?.source || d.originalimage?.source || null;
   } catch { return null; }
 }
 
-async function getPlacePhoto(name, city, kinds) {
-  // 1. Wikipedia REST summary — reliable, no key, no rate limit
-  let url = await fetchWikipediaPhoto(name);
-  if (url) return url;
-  // 2. Unsplash: specific name + city
-  url = await fetchUnsplashPhoto(`${name} ${city}`);
-  if (url) return url;
-  // 3. Unsplash: category + city as last resort
-  const category = (kinds || 'landmark').split(',')[0].replace(/_/g, ' ');
-  url = await fetchUnsplashPhoto(`${category} ${city}`);
-  return url; // null → gradient placeholder
+// Step 3: Wikimedia page images API
+async function _wikimediaSearchPhoto(name) {
+  try {
+    const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(name)}&prop=pageimages&format=json&pithumbsize=400&origin=*`;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const d = await r.json();
+    const page = Object.values(d?.query?.pages || {})[0];
+    return page?.thumbnail?.source || null;
+  } catch { return null; }
+}
+
+// Main photo resolver — detail is the already-fetched OTM detail object
+async function getPlacePhoto(name, city, kinds, detail) {
+  const tag = `[Photo "${name}"]`;
+
+  // Step 1: OTM detail → preview.source
+  const otm = detail?.preview?.source;
+  if (otm) { console.log(`${tag} ✅ Step 1 OTM preview: ${otm}`); return otm; }
+  console.log(`${tag} ❌ Step 1 no OTM preview`);
+
+  // Step 2: Wikipedia REST summary
+  let url = await _wikiSummaryPhoto(name);
+  if (url) { console.log(`${tag} ✅ Step 2 Wikipedia summary: ${url}`); return url; }
+  console.log(`${tag} ❌ Step 2 no Wikipedia summary`);
+
+  // Step 3: Wikimedia page images
+  url = await _wikimediaSearchPhoto(name);
+  if (url) { console.log(`${tag} ✅ Step 3 Wikimedia search: ${url}`); return url; }
+  console.log(`${tag} ❌ Step 3 no Wikimedia result`);
+
+  // Step 4: gradient placeholder (null → caller uses placeholderImg)
+  console.log(`${tag} 🎨 Step 4 gradient fallback`);
+  return null;
 }
 
 async function fetchWeather(lat, lon) {
@@ -1082,15 +1095,23 @@ async function doSearch(query) {
       fetchPOIs(geo.lat, geo.lon, 'natural,sport,amusements,shops,foods,adult', 15),
     ]);
 
-    const enrichTop = await Promise.all(topRaw.slice(0, 10).map(async (p, i) => {
+    const dedupe = (arr) => {
+      const seenXid = new Set(), seenName = new Set();
+      return arr.filter(p => {
+        if (seenXid.has(p.xid) || seenName.has(p.name?.toLowerCase())) return false;
+        seenXid.add(p.xid); seenName.add(p.name?.toLowerCase()); return true;
+      });
+    };
+
+    const enrichTop = await Promise.all(dedupe(topRaw).slice(0, 10).map(async (p, i) => {
       const detail = await fetchPOIDetail(p.xid);
-      const imgUrl = await getPlacePhoto(p.name, state.destination, p.kinds);
+      const imgUrl = await getPlacePhoto(p.name, state.destination, p.kinds, detail);
       return { ...p, ...(detail || {}), img: imgUrl, hue: HUES[i % HUES.length] };
     }));
 
-    const enrichHidden = await Promise.all(hiddenRaw.slice(0, 10).map(async (p, i) => {
+    const enrichHidden = await Promise.all(dedupe(hiddenRaw).slice(0, 10).map(async (p, i) => {
       const detail = await fetchPOIDetail(p.xid);
-      const imgUrl = await getPlacePhoto(p.name, state.destination, p.kinds);
+      const imgUrl = await getPlacePhoto(p.name, state.destination, p.kinds, detail);
       return { ...p, ...(detail || {}), img: imgUrl, hue: HUES[(i + 5) % HUES.length] };
     }));
 
@@ -1278,9 +1299,9 @@ function renderDetail(p, kind) {
   const imgSrc = p.img || placeholderImg(p.hue || 35, 393, 260, _icon);
   document.getElementById('detailHeroImg').src = imgSrc;
   document.getElementById('detailHeroImg').onerror = function() { this.src = placeholderImg(p.hue||35,393,260,_icon); };
-  // If no photo was fetched during search, try on demand now
+  // If no photo was fetched during search, try on demand now (p already has detail merged in)
   if (!p.img) {
-    getPlacePhoto(p.name, state.destination, p.kinds).then(url => {
+    getPlacePhoto(p.name, state.destination, p.kinds, p).then(url => {
       if (url) { p.img = url; document.getElementById('detailHeroImg').src = url; }
     });
   }

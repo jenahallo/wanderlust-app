@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wanderlust</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#2d4a2d">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --green: #2d4a2d;
+    --green-mid: #3a5c3a;
+    --green-light: #4a7050;
+    --gold: #c4892a;
+    --gold-light: #e0a84a;
+    --cream: #f4f1ea;
+    --text: #1a1a1a;
+    --muted: #6b7280;
+    --surface: #ffffff;
+    --radius: 18px;
+  }
+
+  html, body {
+    height: 100%;
+    background: #1a1a1a;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  /* ── iOS device frame ── */
+  .device-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    padding: 16px;
+  }
+
+  .device {
+    position: relative;
+    width: 393px;
+    height: 852px;
+    background: var(--surface);
+    border-radius: 54px;
+    border: 10px solid #1a1a1a;
+    box-shadow:
+      0 0 0 2px #3a3a3a,
+      0 40px 80px rgba(0,0,0,0.7),
+      inset 0 0 0 1px rgba(255,255,255,0.08);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Dynamic Island */
+  .dynamic-island {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 34px;
+    background: #000;
+    border-radius: 20px;
+    z-index: 100;
+  }
+
+  /* Status bar */
+  .status-bar {
+    height: 54px;
+    padding: 14px 28px 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-shrink: 0;
+    background: transparent;
+    position: relative;
+    z-index: 10;
+  }
+  .status-bar .time { font-size: 15px; font-weight: 600; }
+  .status-bar .icons { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+
+  /* App container */
+  .app {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Screens */
+  .screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+    overflow: hidden;
+  }
+  .screen.active {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  /* Scrollable content inside screen */
+  .scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .scroll-area::-webkit-scrollbar { display: none; }
+
+  /* ── HOME SCREEN ── */
+  #home { background: var(--green); }
+
+  .home-hero {
+    padding: 20px 24px 28px;
+    background: linear-gradient(160deg, #2d4a2d 0%, #3a5c3a 100%);
+    position: relative;
+    overflow: hidden;
+  }
+  .home-hero .topo {
+    position: absolute;
+    inset: 0;
+    opacity: 0.08;
+    pointer-events: none;
+  }
+  .home-hero h1 {
+    font-family: 'Fraunces', serif;
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--cream);
+    line-height: 1.15;
+    margin-bottom: 4px;
+    position: relative;
+  }
+  .home-hero h1 em {
+    font-style: italic;
+    color: var(--gold);
+  }
+  .home-hero p {
+    font-size: 13px;
+    color: rgba(244,241,234,0.65);
+    margin-bottom: 20px;
+    position: relative;
+  }
+
+  .search-bar {
+    display: flex;
+    align-items: center;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(196,137,42,0.35);
+    border-radius: 14px;
+    padding: 12px 16px;
+    gap: 10px;
+    position: relative;
+    cursor: text;
+  }
+  .search-bar input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--cream);
+    font-size: 16px;
+    font-family: inherit;
+  }
+  .search-bar input::placeholder { color: rgba(244,241,234,0.45); }
+  .search-bar .search-icon { color: var(--gold); font-size: 18px; }
+  .search-bar .search-btn {
+    background: var(--gold);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  .search-bar .search-btn:active { opacity: 0.8; }
+
+  .home-body {
+    background: var(--cream);
+    border-radius: 24px 24px 0 0;
+    padding: 24px 20px 100px;
+    flex: 1;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .section-title {
+    font-family: 'Fraunces', serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--green);
+    margin-bottom: 16px;
+  }
+
+  /* Recents list */
+  .recents-list { display: flex; flex-direction: column; gap: 10px; }
+  .recent-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px;
+    background: #fff;
+    border-radius: 14px;
+    cursor: pointer;
+    border: 1px solid rgba(0,0,0,0.06);
+    transition: transform 0.15s;
+  }
+  .recent-item:active { transform: scale(0.98); }
+  .recent-thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .recent-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .recent-info { flex: 1; }
+  .recent-name { font-weight: 600; font-size: 15px; color: var(--text); }
+  .recent-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .recent-arrow { color: var(--muted); font-size: 16px; }
+
+  .empty-recents {
+    text-align: center;
+    padding: 32px 20px;
+    color: var(--muted);
+  }
+  .empty-recents .icon { font-size: 40px; margin-bottom: 10px; }
+  .empty-recents p { font-size: 14px; }
+
+  /* API banner */
+  .api-banner {
+    background: #7c5a00;
+    color: #fde68a;
+    font-size: 12px;
+    padding: 8px 16px;
+    text-align: center;
+    line-height: 1.4;
+  }
+  .api-banner a { color: #fbbf24; }
+
+  /* ── RESULTS SCREEN ── */
+  #results { background: var(--surface); }
+
+  .results-header {
+    background: var(--green);
+    padding: 12px 20px 16px;
+    flex-shrink: 0;
+  }
+  .results-header .back-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    cursor: pointer;
+  }
+  .results-header .back-row span { color: var(--gold); font-size: 14px; font-weight: 500; }
+  .results-header h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--cream);
+    margin-bottom: 2px;
+  }
+  .results-header .sub { font-size: 13px; color: rgba(244,241,234,0.6); }
+
+  .results-tabs {
+    display: flex;
+    gap: 0;
+    background: var(--green-mid);
+    padding: 6px;
+    margin: 0 20px 16px;
+    border-radius: 12px;
+    flex-shrink: 0;
+  }
+  .results-tab {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    background: transparent;
+    color: rgba(244,241,234,0.6);
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s;
+  }
+  .results-tab.active {
+    background: var(--gold);
+    color: #fff;
+  }
+
+  /* Top cards horizontal scroll */
+  .top-cards-row {
+    display: flex;
+    gap: 14px;
+    padding: 0 20px 20px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .top-cards-row::-webkit-scrollbar { display: none; }
+
+  .top-card {
+    flex-shrink: 0;
+    width: 200px;
+    border-radius: 20px;
+    overflow: hidden;
+    scroll-snap-align: start;
+    cursor: pointer;
+    position: relative;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    transition: transform 0.15s;
+  }
+  .top-card:active { transform: scale(0.97); }
+  .top-card-img {
+    width: 200px;
+    height: 140px;
+    object-fit: cover;
+    display: block;
+  }
+  .top-card-body { padding: 12px; background: #fff; }
+  .top-card-rank {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .top-card-name { font-weight: 700; font-size: 14px; color: var(--text); line-height: 1.25; }
+  .top-card-tags { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+  .tag {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 20px;
+    background: rgba(196,137,42,0.12);
+    color: var(--gold);
+    font-weight: 600;
+  }
+  .tag.green {
+    background: rgba(45,74,45,0.1);
+    color: var(--green);
+  }
+
+  /* List rows */
+  .list-section-title {
+    font-family: 'Fraunces', serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--green);
+    padding: 4px 20px 12px;
+  }
+
+  .place-list { display: flex; flex-direction: column; gap: 0; }
+  .place-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 20px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+    transition: background 0.15s;
+  }
+  .place-row:active { background: rgba(0,0,0,0.03); }
+  .place-row-img {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  .place-row-info { flex: 1; min-width: 0; }
+  .place-row-name { font-weight: 600; font-size: 15px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .place-row-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .place-row-dist { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .place-row-arrow { color: var(--muted); flex-shrink: 0; }
+
+  /* Hidden gems section */
+  .hidden-section { padding: 20px 20px 0; }
+  .hidden-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .hidden-badge {
+    background: var(--green);
+    color: var(--gold);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 6px;
+  }
+  .hidden-cards-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .hidden-card {
+    border-radius: 16px;
+    overflow: hidden;
+    cursor: pointer;
+    position: relative;
+    aspect-ratio: 3/4;
+    transition: transform 0.15s;
+  }
+  .hidden-card:active { transform: scale(0.97); }
+  .hidden-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .hidden-card-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 28px 10px 10px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.7));
+  }
+  .hidden-card-name { font-size: 13px; font-weight: 700; color: #fff; line-height: 1.25; }
+  .hidden-card-tag { font-size: 10px; color: rgba(255,255,255,0.75); margin-top: 2px; }
+
+  /* Loading skeleton */
+  .skeleton { background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 10px; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  /* ── DETAIL SCREEN ── */
+  #detail { background: var(--surface); }
+
+  .detail-hero {
+    position: relative;
+    height: 260px;
+    flex-shrink: 0;
+  }
+  .detail-hero img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .detail-hero-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(transparent 30%, rgba(0,0,0,0.55) 100%);
+  }
+  .detail-hero-actions {
+    position: absolute;
+    top: 12px;
+    left: 16px;
+    right: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(8px);
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #fff;
+    font-size: 18px;
+    transition: background 0.15s;
+  }
+  .icon-btn:active { background: rgba(0,0,0,0.65); }
+  .icon-btn.saved { color: #f87171; }
+
+  .detail-hero-info {
+    position: absolute;
+    bottom: 14px;
+    left: 16px;
+    right: 16px;
+  }
+  .detail-kind-badge {
+    display: inline-block;
+    background: var(--gold);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+  .detail-name {
+    font-family: 'Fraunces', serif;
+    font-size: 24px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.2;
+  }
+
+  .detail-body { padding: 20px; flex: 1; overflow-y: auto; padding-bottom: 100px; }
+
+  .detail-pills {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .detail-pill {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(45,74,45,0.08);
+    color: var(--green);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 20px;
+  }
+
+  .detail-desc {
+    font-size: 14px;
+    line-height: 1.65;
+    color: #444;
+    margin-bottom: 20px;
+  }
+
+  .info-rows { display: flex; flex-direction: column; gap: 0; }
+  .info-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 13px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+  }
+  .info-row-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .info-row-content { flex: 1; }
+  .info-row-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
+  .info-row-value { font-size: 14px; font-weight: 500; color: var(--text); }
+
+  /* Map preview */
+  .map-preview {
+    border-radius: 16px;
+    overflow: hidden;
+    margin-top: 20px;
+    height: 140px;
+    background: #d4e6c3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+  }
+  .map-preview svg { opacity: 0.5; }
+  .map-pin { position: absolute; font-size: 28px; }
+  .map-label {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--green);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 14px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  /* ── BOTTOM NAV ── */
+  .bottom-nav {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 82px;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(0,0,0,0.08);
+    display: flex;
+    align-items: flex-start;
+    padding-top: 10px;
+    z-index: 50;
+  }
+  .nav-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+    transition: opacity 0.15s;
+  }
+  .nav-btn:active { opacity: 0.6; }
+  .nav-icon { font-size: 22px; line-height: 1; }
+  .nav-label { font-size: 10px; font-weight: 600; color: var(--muted); }
+  .nav-btn.active .nav-icon { filter: none; }
+  .nav-btn.active .nav-label { color: var(--green); }
+  .nav-dot {
+    width: 5px; height: 5px; border-radius: 50%; background: var(--gold);
+    display: none;
+  }
+  .nav-btn.active .nav-dot { display: block; }
+
+  /* Toast */
+  .toast {
+    position: absolute;
+    bottom: 96px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(30,30,30,0.9);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 9px 18px;
+    border-radius: 20px;
+    opacity: 0;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    z-index: 200;
+    pointer-events: none;
+    backdrop-filter: blur(10px);
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* Weather chip */
+  .weather-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(196,137,42,0.3);
+    border-radius: 20px;
+    padding: 5px 12px;
+    font-size: 12px;
+    color: var(--cream);
+    margin-top: 12px;
+  }
+
+  /* Topo background pattern */
+  .topo-bg {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    opacity: 0.06;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    width: 32px; height: 32px;
+    border: 3px solid rgba(196,137,42,0.2);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    gap: 14px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+
+<div class="device-wrap">
+  <div class="device">
+    <div class="dynamic-island"></div>
+
+    <!-- Status bar -->
+    <div class="status-bar" id="statusBar" style="color:#fff; background: #2d4a2d;">
+      <span class="time" id="statusTime">9:41</span>
+      <span class="icons">▲▲▲ WiFi 100%</span>
+    </div>
+
+    <div class="app">
+      <!-- ── HOME ── -->
+      <div class="screen active" id="home">
+        <div id="apiBanner" class="api-banner" style="display:none">
+          Demo mode — <a href="https://opentripmap.io" target="_blank">get an API key</a> to search real destinations.
+        </div>
+        <div class="home-hero">
+          <div class="topo-bg">
+            <svg width="100%" height="100%" viewBox="0 0 393 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <ellipse cx="196" cy="110" rx="180" ry="80" stroke="#c4892a" stroke-width="1.5" fill="none"/>
+              <ellipse cx="196" cy="110" rx="140" ry="55" stroke="#c4892a" stroke-width="1.5" fill="none"/>
+              <ellipse cx="196" cy="110" rx="100" ry="32" stroke="#c4892a" stroke-width="1.5" fill="none"/>
+              <ellipse cx="196" cy="110" rx="60" ry="14" stroke="#c4892a" stroke-width="1.5" fill="none"/>
+            </svg>
+          </div>
+          <h1>Where will<br><em>adventure</em> take you?</h1>
+          <p>Discover icons &amp; hidden gems for any city</p>
+          <div class="search-bar">
+            <span class="search-icon">🧭</span>
+            <input type="text" id="searchInput" placeholder="City, country…" autocomplete="off" autocorrect="off">
+            <button class="search-btn" onclick="triggerSearch()">Explore</button>
+          </div>
+          <div id="weatherChip" class="weather-chip" style="display:none">
+            <span id="weatherIcon">🌤</span>
+            <span id="weatherText">Loading weather…</span>
+          </div>
+        </div>
+        <div class="home-body scroll-area">
+          <div class="section-label">Recent trips</div>
+          <div class="section-title">Your journeys</div>
+          <div class="recents-list" id="recentsList"></div>
+        </div>
+        <div class="bottom-nav" id="homeNav">
+          <button class="nav-btn active" onclick="navigateTo('home')">
+            <span class="nav-icon">🏠</span>
+            <div class="nav-dot"></div>
+            <span class="nav-label">Home</span>
+          </button>
+          <button class="nav-btn" onclick="navigateTo('results')" id="exploreNavBtn">
+            <span class="nav-icon">🗺️</span>
+            <div class="nav-dot"></div>
+            <span class="nav-label">Explore</span>
+          </button>
+          <button class="nav-btn" onclick="navigateTo('detail')" id="placeNavBtn">
+            <span class="nav-icon">📍</span>
+            <div class="nav-dot"></div>
+            <span class="nav-label">Place</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ── RESULTS ── -->
+      <div class="screen" id="results">
+        <div class="results-header">
+          <div class="back-row" onclick="navigateTo('home')">
+            <span>← Back</span>
+          </div>
+          <h2 id="resultsCity">Lisbon</h2>
+          <div class="sub" id="resultsSub">Top sights &amp; hidden gems</div>
+        </div>
+        <div class="results-tabs">
+          <button class="results-tab active" id="tabTop" onclick="switchTab('top')">🏛 Top 10</button>
+          <button class="results-tab" id="tabHidden" onclick="switchTab('hidden')">💎 Hidden</button>
+        </div>
+        <div class="scroll-area" id="resultsScroll" style="padding-bottom:90px">
+          <div id="resultsContent"></div>
+        </div>
+        <div class="bottom-nav">
+          <button class="nav-btn" onclick="navigateTo('home')">
+            <span class="nav-icon">🏠</span>
+            <div class="nav-dot"></div>
+            <span class="nav-label">Home</span>
+          </button>
+          <button class="nav-btn active" onclick="navigateTo('results')">
+            <span class="nav-icon">🗺️</span>
+            <div class="nav-dot"></div>
+            <span class="nav-label">Explore</span>
+          </button>
+          <button class="nav-btn" onclick="navigateTo('detail')" id="placeNavBtn2">
+            <span class="nav-icon">📍</span>
+            <div class="nav-dot"></div>
+            <span class="nav-label">Place</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ── DETAIL ── -->
+      <div class="screen" id="detail">
+        <div class="detail-hero">
+          <img id="detailHeroImg" src="" alt="">
+          <div class="detail-hero-overlay"></div>
+          <div class="detail-hero-actions">
+            <button class="icon-btn" onclick="navigateTo('results')">←</button>
+            <button class="icon-btn" id="saveBtn" onclick="toggleSave()">♡</button>
+          </div>
+          <div class="detail-hero-info">
+            <div class="detail-kind-badge" id="detailBadge">Landmark</div>
+            <div class="detail-name" id="detailName">Place Name</div>
+          </div>
+        </div>
+        <div class="detail-body scroll-area">
+          <div class="detail-pills" id="detailPills"></div>
+          <div class="detail-desc" id="detailDesc"></div>
+          <div class="info-rows" id="detailInfoRows"></div>
+          <div class="map-preview" id="mapPreview" onclick="openMap()">
+            <svg width="100%" height="100%" viewBox="0 0 353 140" fill="none">
+              <rect width="353" height="140" fill="#d4e6c3"/>
+              <path d="M0 70 Q88 40 176 70 Q264 100 353 70" stroke="#a8c090" stroke-width="2" fill="none"/>
+              <path d="M0 90 Q88 60 176 90 Q264 120 353 90" stroke="#a8c090" stroke-width="1.5" fill="none"/>
+              <path d="M0 50 Q88 20 176 50 Q264 80 353 50" stroke="#a8c090" stroke-width="1.5" fill="none"/>
+            </svg>
+            <span class="map-pin">📍</span>
+            <div class="map-label">Open in Maps</div>
+          </div>
+        </div>
+        <div class="bottom-nav">
+          <button class="nav-btn" onclick="navigateTo('home')">
+            <span class="nav-icon">🏠</span>
+            <div class="nav-dot"></div>
+            <span class="nav-label">Home</span>
+          </button>
+          <button class="nav-btn" onclick="navigateTo('results')">
+            <span class="nav-icon">🗺️</span>
+            <div class="nav-dot"></div>
+            <span class="nav-label">Explore</span>
+          </button>
+          <button class="nav-btn active" onclick="navigateTo('detail')">
+            <span class="nav-icon">📍</span>
+            <div class="nav-dot"></div>
+            <span class="nav-label">Place</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="toast" id="toast"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────────────────────────
+const CONFIG = {
+  OPENTRIPMAP_KEY: '5ae2e3f221c38a28845f05b67f334601ff0d8a7720f4a7656de97cd4',
+  UNSPLASH_KEY: '8jQnOQujWw38ztKAWi-ENrf5YCOEX0FwYgxTj6r9NUY',
+};
+const DEMO_MODE = CONFIG.OPENTRIPMAP_KEY === 'YOUR_OPENTRIPMAP_KEY';
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+const state = {
+  screen: 'home',
+  query: '',
+  destination: 'Lisbon',
+  country: 'Portugal',
+  coords: { lat: 38.717, lon: -9.139 },
+  topPlaces: [],
+  hiddenPlaces: [],
+  activePlace: null,
+  activeKind: 'top',
+  tab: 'top',
+  saved: new Set(JSON.parse(localStorage.getItem('wl_saved') || '[]')),
+  recents: JSON.parse(localStorage.getItem('wl_recents') || '[]'),
+};
+
+// ── DEMO DATA ────────────────────────────────────────────────────────────────
+const DEMO_TOP = [
+  { xid:'d0','name':'Jerónimos Monastery','kinds':'religious,architecture','dist':400,'point':{lat:38.6977,lon:-9.2065},'wikipedia_extracts':{text':'A masterpiece of Manueline architecture, this monastery stands where Vasco da Gama prayed before sailing to India. Its ornate cloisters are among the finest in the world.'},'img':null,'hue':35 },
+  { xid:'d1','name':'Belém Tower','kinds':'historic,architecture','dist':800,'point':{lat:38.6916,lon:-9.2159},'wikipedia_extracts':{text':'Built in the early 16th century as a ceremonial gateway to Lisbon, this fortress on the Tagus river is a symbol of Portugal\'s Age of Exploration.'},'img':null,'hue':45 },
+  { xid:'d2','name':'Alfama District','kinds':'historic,interesting_places','dist':1200,'point':{lat:38.7139,lon:-9.1334},'wikipedia_extracts':{text':'Lisbon\'s oldest neighborhood winds up the hillside to the castle. Its narrow lanes are alive with the sound of fado music drifting from open windows.'},'img':null,'hue':25 },
+  { xid:'d3','name':'São Jorge Castle','kinds':'historic,fortifications','dist':900,'point':{lat:38.7139,lon:-9.1334},'wikipedia_extracts':{text':'Perched atop Lisbon\'s highest hill, this Moorish citadel offers sweeping panoramas over terracotta rooftops and the shimmering Tagus estuary.'},'img':null,'hue':55 },
+  { xid:'d4','name':'LX Factory','kinds':'cultural,industrial','dist':1500,'point':{lat:38.7007,lon:-9.1791},'wikipedia_extracts':{text':'A creative hub in a former industrial complex on the Tagus, hosting restaurants, bookshops, design studios, and the vibrant Sunday market.'},'img':null,'hue':15 },
+  { xid:'d5','name':'Oceanarium','kinds':'museums,natural','dist':3200,'point':{lat:38.7633,lon:-9.0950},'wikipedia_extracts':{text':'One of Europe\'s largest aquariums, the Oceanarium immerses visitors in the Atlantic Ocean ecosystem with a spectacular central tank.'},'img':null,'hue':195 },
+  { xid:'d6','name':'Sintra Palace','kinds':'historic,palaces','dist':28000,'point':{lat:38.7977,lon:-9.3936},'wikipedia_extracts':{text':'The colourful National Palace of Sintra, with its twin conical chimneys, has been a royal residence since the 10th century.'},'img':null,'hue':40 },
+  { xid:'d7','name':'Tram 28','kinds':'transport,historic','dist':600,'point':{lat:38.7100,lon:-9.1392},'wikipedia_extracts':{text':'The legendary yellow tram weaves through Lisbon\'s most picturesque neighbourhoods — Graça, Alfama, and Mouraria — clinging to steep cobblestone hills.'},'img':null,'hue':38 },
+  { xid:'d8','name':'Museu do Azulejo','kinds':'museums,art','dist':2100,'point':{lat:38.7224,lon:-9.1157},'wikipedia_extracts':{text':'Housed in a beautiful convent, this museum celebrates the art of azulejo tilework from its 15th-century origins to modern installations.'},'img':null,'hue':200 },
+  { xid:'d9','name':'Pastéis de Belém','kinds':'foods,gastronomy','dist':1100,'point':{lat:38.6974,lon:-9.2035},'wikipedia_extracts':{text':'Since 1837, this bakery has served the original custard tart recipe — a warm, flaky pastry dusted with cinnamon that defines Lisbon.'},'img':null,'hue':30 },
+];
+
+const DEMO_HIDDEN = [
+  { xid:'h0','name':'Miradouro da Graça','kinds':'viewpoints,interesting_places','dist':900,'point':{lat:38.7178,lon:-9.1306},'wikipedia_extracts':{text':'Quieter than Portas do Sol, this hilltop terrace offers unobstructed views over the castle and river, especially magical at golden hour.'},'img':null,'hue':170 },
+  { xid:'h1','name':'Jardim do Torel','kinds':'parks,gardens','dist':750,'point':{lat:38.7200,lon:-9.1432},'wikipedia_extracts':{text':'A secret garden perched above the city noise with a small pool, old benches, and views that few tourists ever discover.'},'img':null,'hue':120 },
+  { xid:'h2','name':'Povo Fado House','kinds':'art,music','dist':500,'point':{lat:38.7137,lon:-9.1322},'wikipedia_extracts':{text':'An intimate fado venue in Alfama where local musicians perform for small audiences — a raw, emotional experience far from the tourist circuit.'},'img':null,'hue':15 },
+  { xid:'h3','name':'Mercado de Arroios','kinds':'markets,foods','dist':1400,'point':{lat:38.7249,lon:-9.1337},'wikipedia_extracts':{text':'A neighbourhood market beloved by locals for its fresh produce, cheap lunches, and multicultural food stalls — entirely off the tourist map.'},'img':null,'hue':210 },
+  { xid:'h4','name':'Biblioteca de Arte','kinds':'cultural,libraries','dist':1800,'point':{lat:38.7121,lon:-9.1482},'wikipedia_extracts':{text':'The Gulbenkian Art Library is free, beautiful, and almost always empty — a calm retreat with access to rare photography and art archives.'},'img':null,'hue':230 },
+];
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+const esc = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+const HUES = [35, 40, 25, 55, 15, 150, 170, 190, 210, 230, 45, 120, 200, 38, 30];
+
+function placeholderImg(hue, w = 200, h = 140) {
+  const bg = `hsl(${hue},35%,28%)`;
+  const sky = `hsl(${hue+180},40%,55%)`;
+  const mtn = `hsl(${hue},40%,22%)`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+    <rect width="${w}" height="${h}" fill="${sky}"/>
+    <rect y="${h*0.55}" width="${w}" height="${h*0.45}" fill="${bg}"/>
+    <polygon points="0,${h*0.55} ${w*0.25},${h*0.2} ${w*0.5},${h*0.55}" fill="${mtn}"/>
+    <polygon points="${w*0.35},${h*0.55} ${w*0.65},${h*0.1} ${w*0.9},${h*0.55}" fill="hsl(${hue},35%,18%)"/>
+    <circle cx="${w*0.8}" cy="${h*0.2}" r="${h*0.1}" fill="rgba(255,255,255,0.7)"/>
+  </svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+function formatKind(kinds) {
+  if (!kinds) return 'Place';
+  const k = kinds.split(',')[0].replace(/_/g,' ');
+  return k.charAt(0).toUpperCase() + k.slice(1);
+}
+
+function topTag(p) {
+  const k = (p.kinds || '').toLowerCase();
+  if (k.includes('museum')) return 'Museum';
+  if (k.includes('religious') || k.includes('church')) return 'Sacred';
+  if (k.includes('palace') || k.includes('castle') || k.includes('fortif')) return 'Castle';
+  if (k.includes('park') || k.includes('garden')) return 'Nature';
+  if (k.includes('food') || k.includes('gastro')) return 'Food';
+  if (k.includes('market')) return 'Market';
+  if (k.includes('view')) return 'Viewpoint';
+  return 'Landmark';
+}
+
+function hiddenTag(p) {
+  const k = (p.kinds || '').toLowerCase();
+  if (k.includes('view')) return '🌅 Viewpoint';
+  if (k.includes('park') || k.includes('garden')) return '🌿 Garden';
+  if (k.includes('market')) return '🛒 Market';
+  if (k.includes('music') || k.includes('art')) return '🎶 Culture';
+  if (k.includes('librar')) return '📚 Library';
+  if (k.includes('sport')) return '⚡ Activity';
+  return '💎 Secret';
+}
+
+function formatDist(m) {
+  if (!m && m !== 0) return '';
+  return m < 1000 ? `${m}m away` : `${(m/1000).toFixed(1)}km away`;
+}
+
+function estimateTime(m) {
+  if (!m && m !== 0) return '';
+  const min = Math.round(m / 80);
+  return min < 60 ? `~${min} min walk` : `~${Math.round(min/60)}h walk`;
+}
+
+function weatherDesc(wmo) {
+  if (wmo === 0) return ['☀️','Clear skies'];
+  if (wmo <= 3) return ['⛅','Partly cloudy'];
+  if (wmo <= 49) return ['🌫','Fog'];
+  if (wmo <= 67) return ['🌧','Rain'];
+  if (wmo <= 77) return ['❄️','Snow'];
+  if (wmo <= 82) return ['🌦','Showers'];
+  return ['⛈','Thunderstorm'];
+}
+
+// ── API ──────────────────────────────────────────────────────────────────────
+async function geocode(city) {
+  const r = await fetch(`https://api.opentripmap.com/0.1/en/places/geoname?name=${encodeURIComponent(city)}&apikey=${CONFIG.OPENTRIPMAP_KEY}`);
+  if (!r.ok) throw new Error('geocode failed');
+  return r.json();
+}
+
+async function fetchPOIs(lat, lon, kinds, limit = 20, radius = 5000) {
+  const url = `https://api.opentripmap.com/0.1/en/places/radius?radius=${radius}&lon=${lon}&lat=${lat}&kinds=${kinds}&limit=${limit}&format=json&apikey=${CONFIG.OPENTRIPMAP_KEY}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('POI fetch failed');
+  return r.json();
+}
+
+async function fetchPOIDetail(xid) {
+  const r = await fetch(`https://api.opentripmap.com/0.1/en/places/xid/${xid}?apikey=${CONFIG.OPENTRIPMAP_KEY}`);
+  if (!r.ok) return null;
+  return r.json();
+}
+
+async function fetchUnsplashPhoto(query) {
+  if (CONFIG.UNSPLASH_KEY === 'YOUR_UNSPLASH_KEY') return null;
+  try {
+    const r = await fetch(`https://api.unsplash.com/photos/random?query=${encodeURIComponent(query)}&orientation=landscape&client_id=${CONFIG.UNSPLASH_KEY}`);
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.urls?.regular || null;
+  } catch { return null; }
+}
+
+async function fetchWeather(lat, lon) {
+  const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
+  if (!r.ok) return null;
+  return r.json();
+}
+
+// ── SEARCH ───────────────────────────────────────────────────────────────────
+async function doSearch(query) {
+  state.query = query;
+  navigateTo('results');
+  document.getElementById('resultsContent').innerHTML = `
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <div>Discovering ${esc(query)}…</div>
+    </div>`;
+  document.getElementById('resultsCity').textContent = query;
+  document.getElementById('resultsSub').textContent = 'Loading…';
+
+  try {
+    if (DEMO_MODE) throw new Error('demo');
+
+    const geo = await geocode(query);
+    state.destination = geo.name || query;
+    state.country = geo.country || '';
+    state.coords = { lat: geo.lat, lon: geo.lon };
+
+    const [topRaw, hiddenRaw] = await Promise.all([
+      fetchPOIs(geo.lat, geo.lon, 'cultural,historic,architecture,museums,religion,natural', 20),
+      fetchPOIs(geo.lat, geo.lon, 'natural,sport,amusements,shops,foods,adult', 15),
+    ]);
+
+    const enrichTop = await Promise.all(topRaw.slice(0, 10).map(async (p, i) => {
+      const detail = await fetchPOIDetail(p.xid);
+      const imgUrl = await fetchUnsplashPhoto(`${p.name} ${state.destination}`);
+      return { ...p, ...(detail || {}), img: imgUrl, hue: HUES[i % HUES.length] };
+    }));
+
+    const enrichHidden = await Promise.all(hiddenRaw.slice(0, 10).map(async (p, i) => {
+      const detail = await fetchPOIDetail(p.xid);
+      const imgUrl = await fetchUnsplashPhoto(`${p.name} ${state.destination} hidden`);
+      return { ...p, ...(detail || {}), img: imgUrl, hue: HUES[(i + 5) % HUES.length] };
+    }));
+
+    state.topPlaces = enrichTop;
+    state.hiddenPlaces = enrichHidden;
+
+  } catch {
+    state.destination = query;
+    state.country = 'Demo';
+    state.coords = { lat: 38.717, lon: -9.139 };
+    state.topPlaces = DEMO_TOP;
+    state.hiddenPlaces = DEMO_HIDDEN;
+    if (!DEMO_MODE) showToast('API error — showing Lisbon demo');
+  }
+
+  // Save to recents
+  if (!state.recents.find(r => r.name === state.destination)) {
+    state.recents.unshift({ name: state.destination, country: state.country, hue: HUES[0] });
+    if (state.recents.length > 5) state.recents.pop();
+    localStorage.setItem('wl_recents', JSON.stringify(state.recents));
+    renderRecents();
+  }
+
+  document.getElementById('resultsCity').textContent = state.destination;
+  document.getElementById('resultsSub').textContent = `${state.country} · Top sights & hidden gems`;
+
+  state.tab = 'top';
+  document.getElementById('tabTop').classList.add('active');
+  document.getElementById('tabHidden').classList.remove('active');
+  renderResultsTab();
+
+  // Weather (no API key needed)
+  fetchWeather(state.coords.lat, state.coords.lon).then(w => {
+    if (!w?.current_weather) return;
+    const [icon, desc] = weatherDesc(w.current_weather.weathercode);
+    const temp = Math.round(w.current_weather.temperature);
+    document.getElementById('weatherChip').style.display = 'inline-flex';
+    document.getElementById('weatherIcon').textContent = icon;
+    document.getElementById('weatherText').textContent = `${temp}°C · ${desc} in ${state.destination}`;
+  }).catch(() => {});
+}
+
+// ── RENDER RESULTS ───────────────────────────────────────────────────────────
+function switchTab(tab) {
+  state.tab = tab;
+  document.getElementById('tabTop').classList.toggle('active', tab === 'top');
+  document.getElementById('tabHidden').classList.toggle('active', tab === 'hidden');
+  document.getElementById('resultsScroll').scrollTop = 0;
+  renderResultsTab();
+}
+
+function renderResultsTab() {
+  const el = document.getElementById('resultsContent');
+  if (state.tab === 'top') {
+    el.innerHTML = renderTopSection();
+  } else {
+    el.innerHTML = renderHiddenSection();
+  }
+}
+
+function renderTopSection() {
+  const places = state.topPlaces;
+  if (!places.length) return '<div class="loading-state"><div>No places found.</div></div>';
+
+  const cards = places.slice(0, 5).map((p, i) => topCardHTML(p, i)).join('');
+  const rows = places.slice(5).map((p, i) => listRowHTML(p, i + 5)).join('');
+
+  return `
+    <div class="top-cards-row">${cards}</div>
+    ${rows ? `<div class="list-section-title" style="padding-top:4px">More to explore</div><div class="place-list">${rows}</div>` : ''}
+  `;
+}
+
+function topCardHTML(p, i) {
+  const imgSrc = p.img || placeholderImg(p.hue || 35, 200, 140);
+  const tag = topTag(p);
+  return `
+    <div class="top-card" onclick="openDetail('${esc(p.xid)}','top')">
+      <img class="top-card-img" src="${imgSrc}" alt="${esc(p.name)}" onerror="this.src='${placeholderImg(p.hue||35,200,140)}'">
+      <div class="top-card-body">
+        <div class="top-card-rank">#${i+1} of 10</div>
+        <div class="top-card-name">${esc(p.name)}</div>
+        <div class="top-card-tags">
+          <span class="tag">${esc(tag)}</span>
+          ${p.dist ? `<span class="tag green">${esc(formatDist(p.dist))}</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
+function listRowHTML(p, i) {
+  const imgSrc = p.img || placeholderImg(p.hue || 35, 56, 56);
+  const tag = topTag(p);
+  return `
+    <div class="place-row" onclick="openDetail('${esc(p.xid)}','top')">
+      <img class="place-row-img" src="${imgSrc}" alt="${esc(p.name)}" onerror="this.src='${placeholderImg(p.hue||35,56,56)}'">
+      <div class="place-row-info">
+        <div class="place-row-name">${esc(p.name)}</div>
+        <div class="place-row-sub">${esc(tag)}</div>
+        ${p.dist ? `<div class="place-row-dist">${esc(formatDist(p.dist))}</div>` : ''}
+      </div>
+      <span class="place-row-arrow">›</span>
+    </div>`;
+}
+
+function renderHiddenSection() {
+  const places = state.hiddenPlaces;
+  if (!places.length) return '<div class="loading-state"><div>No hidden gems found.</div></div>';
+
+  const rows = places.slice(0, 5).map(p => listRowHTML(p, 0)).join('');
+  const grid = places.slice(5, 10).map(p => hiddenCardHTML(p)).join('');
+
+  return `
+    <div class="hidden-section">
+      <div class="hidden-header">
+        <span class="hidden-badge">💎 Hidden Gems</span>
+        <div class="list-section-title" style="margin:0;padding:0;font-size:16px">Off the beaten path</div>
+      </div>
+      <div class="place-list">${rows}</div>
+      ${grid ? `<div class="hidden-cards-grid" style="margin-top:16px;padding-bottom:20px">${grid}</div>` : ''}
+    </div>`;
+}
+
+function hiddenCardHTML(p) {
+  const imgSrc = p.img || placeholderImg(p.hue || 170, 160, 213);
+  const tag = hiddenTag(p);
+  return `
+    <div class="hidden-card" onclick="openDetail('${esc(p.xid)}','hidden')">
+      <img src="${imgSrc}" alt="${esc(p.name)}" onerror="this.src='${placeholderImg(p.hue||170,160,213)}'">
+      <div class="hidden-card-overlay">
+        <div class="hidden-card-name">${esc(p.name)}</div>
+        <div class="hidden-card-tag">${esc(tag)}</div>
+      </div>
+    </div>`;
+}
+
+// ── DETAIL ───────────────────────────────────────────────────────────────────
+function openDetail(xid, kind) {
+  const list = kind === 'top' ? state.topPlaces : state.hiddenPlaces;
+  const place = list.find(p => p.xid === xid);
+  if (!place) return;
+  state.activePlace = place;
+  state.activeKind = kind;
+  renderDetail(place);
+  navigateTo('detail');
+}
+
+function renderDetail(p) {
+  const imgSrc = p.img || placeholderImg(p.hue || 35, 393, 260);
+  document.getElementById('detailHeroImg').src = imgSrc;
+  document.getElementById('detailHeroImg').onerror = function() { this.src = placeholderImg(p.hue||35,393,260); };
+  document.getElementById('detailName').textContent = p.name || '';
+  document.getElementById('detailBadge').textContent = topTag(p);
+
+  // Save button
+  const saved = state.saved.has(p.xid);
+  const saveBtn = document.getElementById('saveBtn');
+  saveBtn.textContent = saved ? '♥' : '♡';
+  saveBtn.classList.toggle('saved', saved);
+
+  // Pills
+  const pills = [];
+  if (p.dist) pills.push(`🚶 ${estimateTime(p.dist)}`);
+  if (p.dist) pills.push(`📏 ${formatDist(p.dist)}`);
+  if (p.point?.lat) pills.push(`📍 ${p.point.lat.toFixed(3)}, ${p.point.lon.toFixed(3)}`);
+  document.getElementById('detailPills').innerHTML = pills.map(t => `<div class="detail-pill">${esc(t)}</div>`).join('');
+
+  // Description
+  const desc = p.wikipedia_extracts?.text || p.info?.descr || 'A wonderful place worth visiting.';
+  document.getElementById('detailDesc').textContent = desc;
+
+  // Info rows
+  const rows = [];
+  if (p.address?.city || p.address?.town) rows.push(['📍', 'Location', [p.address?.road, p.address?.city || p.address?.town].filter(Boolean).join(', ')]);
+  if (p.url) rows.push(['🔗', 'Website', `<a href="${esc(p.url)}" target="_blank" style="color:var(--green)">${esc(p.url.replace(/^https?:\/\//,''))}</a>`]);
+  if (p.wikipedia) rows.push(['📖', 'Wikipedia', `<a href="${esc(p.wikipedia)}" target="_blank" style="color:var(--green)">Read more</a>`]);
+  rows.push(['🕐', 'Best time', kind === 'hidden' ? 'Early morning or late afternoon' : 'Morning for fewer crowds']);
+  rows.push(['⭐', 'Category', formatKind(p.kinds)]);
+
+  document.getElementById('detailInfoRows').innerHTML = rows.map(([icon, label, val]) => `
+    <div class="info-row">
+      <div class="info-row-icon">${icon}</div>
+      <div class="info-row-content">
+        <div class="info-row-label">${esc(label)}</div>
+        <div class="info-row-value">${val}</div>
+      </div>
+    </div>`).join('');
+}
+
+function toggleSave() {
+  const p = state.activePlace;
+  if (!p) return;
+  if (state.saved.has(p.xid)) {
+    state.saved.delete(p.xid);
+    document.getElementById('saveBtn').textContent = '♡';
+    document.getElementById('saveBtn').classList.remove('saved');
+    showToast('Removed from saved');
+  } else {
+    state.saved.add(p.xid);
+    document.getElementById('saveBtn').textContent = '♥';
+    document.getElementById('saveBtn').classList.add('saved');
+    showToast('Saved!');
+  }
+  localStorage.setItem('wl_saved', JSON.stringify([...state.saved]));
+}
+
+function openMap() {
+  const p = state.activePlace;
+  const lat = p?.point?.lat || state.coords.lat;
+  const lon = p?.point?.lon || state.coords.lon;
+  const name = p?.name || state.destination;
+  window.open(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}&zoom=16&layers=M`, '_blank');
+}
+
+// ── NAVIGATION ───────────────────────────────────────────────────────────────
+function navigateTo(screenId) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(screenId).classList.add('active');
+  state.screen = screenId;
+
+  // Update status bar color
+  const sb = document.getElementById('statusBar');
+  if (screenId === 'home') {
+    sb.style.background = '#2d4a2d';
+    sb.style.color = '#fff';
+  } else if (screenId === 'results') {
+    sb.style.background = '#2d4a2d';
+    sb.style.color = '#fff';
+  } else {
+    sb.style.background = 'transparent';
+    sb.style.color = '#fff';
+  }
+}
+
+// ── RECENTS ──────────────────────────────────────────────────────────────────
+function renderRecents() {
+  const el = document.getElementById('recentsList');
+  if (!state.recents.length) {
+    el.innerHTML = `<div class="empty-recents"><div class="icon">🌍</div><p>Search a city to start your journey</p></div>`;
+    return;
+  }
+  el.innerHTML = state.recents.map(r => `
+    <div class="recent-item" onclick="doSearch('${esc(r.name)}')">
+      <div class="recent-thumb">
+        <img src="${placeholderImg(r.hue || 35, 48, 48)}" alt="">
+      </div>
+      <div class="recent-info">
+        <div class="recent-name">${esc(r.name)}</div>
+        <div class="recent-sub">${esc(r.country || '')}</div>
+      </div>
+      <span class="recent-arrow">›</span>
+    </div>`).join('');
+}
+
+// ── TOAST ────────────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ── SEARCH INPUT ─────────────────────────────────────────────────────────────
+function triggerSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (q) doSearch(q);
+}
+
+document.getElementById('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') triggerSearch();
+});
+
+// ── CLOCK ────────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('statusTime').textContent =
+    `${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
+}
+updateClock();
+setInterval(updateClock, 30000);
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+if (DEMO_MODE) {
+  document.getElementById('apiBanner').style.display = 'block';
+}
+renderRecents();
+
+// Service worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>

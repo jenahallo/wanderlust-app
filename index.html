@@ -600,13 +600,14 @@
     bottom: 0;
     left: 0;
     right: 0;
-    height: 82px;
-    background: rgba(255,255,255,0.92);
+    min-height: 60px;
+    height: 72px;
+    background: rgba(255,255,255,0.95);
     backdrop-filter: blur(20px);
     border-top: 1px solid rgba(0,0,0,0.08);
     display: flex;
-    align-items: flex-start;
-    padding-top: 10px;
+    align-items: center;
+    padding-top: 6px;
     z-index: 50;
   }
   .nav-btn {
@@ -618,12 +619,12 @@
     background: none;
     border: none;
     cursor: pointer;
-    padding: 0;
+    padding: 6px 0;
     font-family: inherit;
     transition: opacity 0.15s;
   }
   .nav-btn:active { opacity: 0.6; }
-  .nav-icon { font-size: 22px; line-height: 1; }
+  .nav-icon { font-size: 24px; line-height: 1; }
   .nav-label { font-size: 10px; font-weight: 600; color: var(--muted); }
   .nav-btn.active .nav-icon { filter: none; }
   .nav-btn.active .nav-label { color: var(--green); }
@@ -632,6 +633,26 @@
     display: none;
   }
   .nav-btn.active .nav-dot { display: block; }
+
+  /* ── MOBILE: fill full screen, fix nav ── */
+  @media (max-width: 500px) {
+    html, body { height: 100%; overflow: hidden; }
+    .device-wrap { padding: 0; height: 100dvh; align-items: stretch; }
+    .device {
+      width: 100%; height: 100dvh;
+      border-radius: 0; border: none; box-shadow: none;
+    }
+    .dynamic-island { display: none; }
+    .bottom-nav {
+      position: fixed !important;
+      bottom: 0; left: 0; right: 0;
+      z-index: 9999 !important;
+      height: 60px;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .home-body { padding-bottom: 80px; }
+    .detail-body { padding-bottom: 80px; }
+  }
 
   /* Toast */
   .toast {
@@ -897,16 +918,30 @@ const esc = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 
 const HUES = [35, 40, 25, 55, 15, 150, 170, 190, 210, 230, 45, 120, 200, 38, 30];
 
-function placeholderImg(hue, w = 200, h = 140) {
-  const bg = `hsl(${hue},35%,28%)`;
-  const sky = `hsl(${hue+180},40%,55%)`;
-  const mtn = `hsl(${hue},40%,22%)`;
+function kindIcon(kinds) {
+  const k = (kinds || '').toLowerCase();
+  if (k.includes('museum')) return '🏛';
+  if (k.includes('religious') || k.includes('church') || k.includes('mosque') || k.includes('synagog')) return '⛪';
+  if (k.includes('palace') || k.includes('castle') || k.includes('fortif')) return '🏰';
+  if (k.includes('park') || k.includes('garden')) return '🌿';
+  if (k.includes('food') || k.includes('gastro') || k.includes('restaur')) return '🍽';
+  if (k.includes('market')) return '🛒';
+  if (k.includes('view')) return '🌅';
+  if (k.includes('natural')) return '🌳';
+  if (k.includes('sport')) return '⚡';
+  if (k.includes('art')) return '🎨';
+  if (k.includes('librar')) return '📚';
+  return '📍';
+}
+
+function placeholderImg(hue, w = 200, h = 140, icon = '📍') {
+  const c1 = `hsl(${hue},40%,30%)`;
+  const c2 = `hsl(${hue + 20},50%,18%)`;
+  const fs = Math.round(Math.min(w, h) * 0.38);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-    <rect width="${w}" height="${h}" fill="${sky}"/>
-    <rect y="${h*0.55}" width="${w}" height="${h*0.45}" fill="${bg}"/>
-    <polygon points="0,${h*0.55} ${w*0.25},${h*0.2} ${w*0.5},${h*0.55}" fill="${mtn}"/>
-    <polygon points="${w*0.35},${h*0.55} ${w*0.65},${h*0.1} ${w*0.9},${h*0.55}" fill="hsl(${hue},35%,18%)"/>
-    <circle cx="${w*0.8}" cy="${h*0.2}" r="${h*0.1}" fill="rgba(255,255,255,0.7)"/>
+    <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${c1}"/><stop offset="100%" stop-color="${c2}"/></linearGradient></defs>
+    <rect width="${w}" height="${h}" fill="url(#g)"/>
+    <text x="${w/2}" y="${h/2 + fs*0.35}" text-anchor="middle" font-size="${fs}" opacity="0.45">${icon}</text>
   </svg>`;
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
@@ -942,7 +977,7 @@ function hiddenTag(p) {
 
 function formatDist(m) {
   if (!m && m !== 0) return '';
-  return m < 1000 ? `${m}m away` : `${(m/1000).toFixed(1)}km away`;
+  return m < 1000 ? `${Math.round(m)}m away` : `${(m/1000).toFixed(1)} km away`;
 }
 
 function estimateTime(m) {
@@ -991,28 +1026,29 @@ async function fetchUnsplashPhoto(query) {
   } catch { return null; }
 }
 
-async function fetchWikimediaPhoto(placeName) {
+async function fetchWikipediaPhoto(placeName) {
   try {
-    const url = `https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&titles=${encodeURIComponent(placeName)}&format=json&pithumbsize=600&origin=*`;
-    const r = await fetch(url);
+    const slug = encodeURIComponent(placeName.trim().replace(/\s+/g, '_'));
+    const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${slug}`, {
+      headers: { 'Accept': 'application/json' },
+    });
     if (!r.ok) return null;
     const d = await r.json();
-    const page = Object.values(d?.query?.pages || {})[0];
-    return page?.thumbnail?.source || null;
+    return d.thumbnail?.source || d.originalimage?.source || null;
   } catch { return null; }
 }
 
 async function getPlacePhoto(name, city, kinds) {
-  // 1. Specific name + city on Unsplash
-  let url = await fetchUnsplashPhoto(`${name} ${city}`);
+  // 1. Wikipedia REST summary — reliable, no key, no rate limit
+  let url = await fetchWikipediaPhoto(name);
   if (url) return url;
-  // 2. Wikipedia thumbnail
-  url = await fetchWikimediaPhoto(name);
+  // 2. Unsplash: specific name + city
+  url = await fetchUnsplashPhoto(`${name} ${city}`);
   if (url) return url;
-  // 3. Broader: category + city on Unsplash
+  // 3. Unsplash: category + city as last resort
   const category = (kinds || 'landmark').split(',')[0].replace(/_/g, ' ');
   url = await fetchUnsplashPhoto(`${category} ${city}`);
-  return url;
+  return url; // null → gradient placeholder
 }
 
 async function fetchWeather(lat, lon) {
@@ -1129,11 +1165,12 @@ function renderTopSection() {
 }
 
 function topCardHTML(p, i) {
-  const imgSrc = p.img || placeholderImg(p.hue || 35, 200, 140);
+  const icon = kindIcon(p.kinds);
+  const imgSrc = p.img || placeholderImg(p.hue || 35, 200, 140, icon);
   const tag = topTag(p);
   return `
     <div class="top-card" data-xid="${esc(p.xid)}" data-kind="top">
-      <img class="top-card-img" src="${imgSrc}" alt="${esc(p.name)}" onerror="this.src='${placeholderImg(p.hue||35,200,140)}'">
+      <img class="top-card-img" src="${imgSrc}" alt="${esc(p.name)}" onerror="this.src='${placeholderImg(p.hue||35,200,140,icon)}'">
       <div class="top-card-body">
         <div class="top-card-rank">#${i+1} of 10</div>
         <div class="top-card-name">${esc(p.name)}</div>
@@ -1146,11 +1183,12 @@ function topCardHTML(p, i) {
 }
 
 function listRowHTML(p, i, kind = 'top') {
-  const imgSrc = p.img || placeholderImg(p.hue || 35, 56, 56);
+  const icon = kindIcon(p.kinds);
+  const imgSrc = p.img || placeholderImg(p.hue || 35, 56, 56, icon);
   const tag = kind === 'hidden' ? hiddenTag(p).replace(/^.\s/,'') : topTag(p);
   return `
     <div class="place-row" data-xid="${esc(p.xid)}" data-kind="${kind}">
-      <img class="place-row-img" src="${imgSrc}" alt="${esc(p.name)}" onerror="this.src='${placeholderImg(p.hue||35,56,56)}'">
+      <img class="place-row-img" src="${imgSrc}" alt="${esc(p.name)}" onerror="this.src='${placeholderImg(p.hue||35,56,56,icon)}'">
       <div class="place-row-info">
         <div class="place-row-name">${esc(p.name)}</div>
         <div class="place-row-sub">${esc(tag)}</div>
@@ -1179,11 +1217,12 @@ function renderHiddenSection() {
 }
 
 function hiddenCardHTML(p) {
-  const imgSrc = p.img || placeholderImg(p.hue || 170, 160, 213);
+  const icon = kindIcon(p.kinds);
+  const imgSrc = p.img || placeholderImg(p.hue || 170, 160, 213, icon);
   const tag = hiddenTag(p);
   return `
     <div class="hidden-card" data-xid="${esc(p.xid)}" data-kind="hidden">
-      <img src="${imgSrc}" alt="${esc(p.name)}" onerror="this.src='${placeholderImg(p.hue||170,160,213)}'">
+      <img src="${imgSrc}" alt="${esc(p.name)}" onerror="this.src='${placeholderImg(p.hue||170,160,213,icon)}'">
       <div class="hidden-card-overlay">
         <div class="hidden-card-name">${esc(p.name)}</div>
         <div class="hidden-card-tag">${esc(tag)}</div>
@@ -1235,9 +1274,10 @@ function openDetail(xid, kind) {
 
 function renderDetail(p, kind) {
   kind = kind || state.activeKind;
-  const imgSrc = p.img || placeholderImg(p.hue || 35, 393, 260);
+  const _icon = kindIcon(p.kinds);
+  const imgSrc = p.img || placeholderImg(p.hue || 35, 393, 260, _icon);
   document.getElementById('detailHeroImg').src = imgSrc;
-  document.getElementById('detailHeroImg').onerror = function() { this.src = placeholderImg(p.hue||35,393,260); };
+  document.getElementById('detailHeroImg').onerror = function() { this.src = placeholderImg(p.hue||35,393,260,_icon); };
   // If no photo was fetched during search, try on demand now
   if (!p.img) {
     getPlacePhoto(p.name, state.destination, p.kinds).then(url => {

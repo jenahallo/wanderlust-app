@@ -946,6 +946,31 @@ function kindGradient(kinds) {
   return 'linear-gradient(135deg, #3a3a2d, #6a6a4a)';
 }
 
+function truncName(name, max = 35) {
+  return name.length > max ? name.slice(0, max - 1).trim() + '…' : name;
+}
+
+function simplifyName(name) {
+  const STOP = /^(a|an|the|and|or|of|in|at|to|by|for|with|on|from|dedicated|near|st|saint|formerly|known|as|its)$/i;
+  const words = name.trim().split(/\s+/).filter(w => !STOP.test(w.replace(/[^a-zA-ZÀ-ž]/g, '')));
+  if (words.length <= 2) return name;
+  return words.slice(-2).join(' ');
+}
+
+function kindSearchWord(kinds) {
+  const k = (kinds || '').toLowerCase();
+  if (k.includes('museum')) return 'museum';
+  if (k.includes('castle') || k.includes('palace') || k.includes('fortif')) return 'castle';
+  if (k.includes('religious') || k.includes('church') || k.includes('mosque') || k.includes('synagog')) return 'church';
+  if (k.includes('natural') || k.includes('park') || k.includes('garden')) return 'nature';
+  if (k.includes('memorial') || k.includes('monument')) return 'monument';
+  if (k.includes('foods') || k.includes('restaurant') || k.includes('cafe')) return 'restaurant';
+  if (k.includes('bar') || k.includes('pub')) return 'bar';
+  if (k.includes('shop') || k.includes('market')) return 'market';
+  if (k.includes('sport') || k.includes('stadium')) return 'sport';
+  return 'landmark';
+}
+
 function formatKind(kinds) {
   if (!kinds) return 'Place';
   const k = kinds.split(',')[0].replace(/_/g,' ');
@@ -1056,12 +1081,17 @@ async function _wikimediaSearchPhoto(name) {
   } catch { return null; }
 }
 
+const _unsplashCache = new Map();
 async function _unsplashPhoto(query) {
+  const key = query.toLowerCase();
+  if (_unsplashCache.has(key)) return _unsplashCache.get(key);
   try {
     const r = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape`, { headers: { Authorization: `Client-ID ${CONFIG.UNSPLASH_KEY}` } });
     if (!r.ok) return null;
     const d = await r.json();
-    return d.results?.[0]?.urls?.regular || null;
+    const url = d.results?.[0]?.urls?.regular || null;
+    _unsplashCache.set(key, url);
+    return url;
   } catch { return null; }
 }
 
@@ -1070,39 +1100,44 @@ const WIKI_WORTHY = ['castle', 'palace', 'fortif', 'museum', 'religious', 'churc
 // Main photo resolver — detail is the already-fetched OTM detail object
 async function getPlacePhoto(name, city, kinds, detail) {
   const tag = `[Photo "${name}"]`;
+  let url;
 
-  // Step 1: OTM detail → preview.source
+  // T1: OTM preview.source
   const otm = detail?.preview?.source;
-  if (otm) { console.log(`${tag} ✅ OTM preview`); return otm; }
+  if (otm) { console.log(`${tag} ✅ T1 OTM`); return otm; }
 
-  // Step 2 & 3: Wikipedia — only for cultural/historic categories, skip bars/restaurants/shops etc.
+  // T2: Wikipedia — only wiki-worthy categories
   const k = (kinds || '').toLowerCase();
   if (WIKI_WORTHY.some(w => k.includes(w))) {
-    let url = await _wikiSummaryPhoto(name);
-    if (url) { console.log(`${tag} ✅ Wikipedia summary`); return url; }
+    url = await _wikiSummaryPhoto(name);
+    if (url) { console.log(`${tag} ✅ T2 Wikipedia summary`); return url; }
     url = await _wikimediaSearchPhoto(name);
-    if (url) { console.log(`${tag} ✅ Wikimedia search`); return url; }
-  } else {
-    console.log(`${tag} ⏭ skipping Wikipedia (category: ${k.split(',')[0]})`);
+    if (url) { console.log(`${tag} ✅ T2 Wikimedia search`); return url; }
   }
 
-  // Step 4a: Unsplash — name + city
-  const q1 = `${name} ${city}`;
-  url = await _unsplashPhoto(q1);
-  if (url) { console.log(`${tag} ✅ Unsplash tier 1 "${q1}"`); return url; }
-
-  // Step 4b: Unsplash — city + landmark
-  const q2 = `${city} landmark`;
-  url = await _unsplashPhoto(q2);
-  if (url) { console.log(`${tag} ✅ Unsplash tier 2 "${q2}"`); return url; }
-
-  // Step 4c: Unsplash — city + travel
-  const q3 = `${city} travel`;
+  // T3: Unsplash — simplified name (last 2 meaningful words) + city
+  const simplified = simplifyName(name);
+  const q3 = `${simplified} ${city}`;
   url = await _unsplashPhoto(q3);
-  if (url) { console.log(`${tag} ✅ Unsplash tier 3 "${q3}"`); return url; }
+  if (url) { console.log(`${tag} ✅ T3 Unsplash "${q3}"`); return url; }
 
-  // Step 5: gradient fallback
-  console.log(`${tag} 🎨 gradient fallback`);
+  // T4: Unsplash — city + category keyword
+  const catWord = kindSearchWord(kinds);
+  const q4 = `${city} ${catWord}`;
+  url = await _unsplashPhoto(q4);
+  if (url) { console.log(`${tag} ✅ T4 Unsplash "${q4}"`); return url; }
+
+  // T5: Unsplash — city travel
+  const q5 = `${city} travel`;
+  url = await _unsplashPhoto(q5);
+  if (url) { console.log(`${tag} ✅ T5 Unsplash "${q5}"`); return url; }
+
+  // T5b: Unsplash — city alone (final safety net for top cards)
+  url = await _unsplashPhoto(city);
+  if (url) { console.log(`${tag} ✅ T5b Unsplash "${city}"`); return url; }
+
+  // T6: gradient fallback
+  console.log(`${tag} 🎨 T6 gradient`);
   return null;
 }
 
@@ -1269,7 +1304,7 @@ function topCardHTML(p, i) {
         src="${p.img ? esc(p.img) : TRANSPARENT_GIF}" alt="${esc(p.name)}"${style}${onerr}>
       <div class="top-card-body">
         <div class="top-card-rank">#${i+1} of 10</div>
-        <div class="top-card-name">${esc(p.name)}</div>
+        <div class="top-card-name">${esc(truncName(p.name))}</div>
         <div class="top-card-tags">
           <span class="tag">${esc(tag)}</span>
           ${p.dist && p.dist >= 10 && p.dist < 500000 ? `<span class="tag green">${esc(formatDist(p.dist))}</span>` : ''}
@@ -1288,7 +1323,7 @@ function listRowHTML(p, i, kind = 'top') {
       <img class="${p.img ? 'place-row-img' : 'place-row-img photo-skeleton'}" data-photo-xid="${esc(p.xid)}" data-pw="56" data-ph="56"
         src="${p.img ? esc(p.img) : TRANSPARENT_GIF}" alt="${esc(p.name)}"${style}${onerr}>
       <div class="place-row-info">
-        <div class="place-row-name">${esc(p.name)}</div>
+        <div class="place-row-name">${esc(truncName(p.name))}</div>
         <div class="place-row-sub">${esc(tag)}</div>
         ${p.dist && p.dist >= 10 && p.dist < 500000 ? `<div class="place-row-dist">${esc(formatDist(p.dist))}</div>` : ''}
       </div>
@@ -1324,7 +1359,7 @@ function hiddenCardHTML(p) {
       <img class="${p.img ? '' : 'photo-skeleton'}" data-photo-xid="${esc(p.xid)}" data-pw="160" data-ph="213"
         src="${p.img ? esc(p.img) : TRANSPARENT_GIF}" alt="${esc(p.name)}"${style}${onerr}>
       <div class="hidden-card-overlay">
-        <div class="hidden-card-name">${esc(p.name)}</div>
+        <div class="hidden-card-name">${esc(truncName(p.name))}</div>
         <div class="hidden-card-tag">${esc(tag)}</div>
       </div>
     </div>`;

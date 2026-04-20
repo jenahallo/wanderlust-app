@@ -934,19 +934,16 @@ function kindIcon(kinds) {
   if (k.includes('sport')) return '⚡';
   if (k.includes('art')) return '🎨';
   if (k.includes('librar')) return '📚';
-  return '📍';
+  return '🗺';
 }
 
-function placeholderImg(hue, w = 200, h = 140, icon = '📍') {
-  const c1 = `hsl(${hue},40%,30%)`;
-  const c2 = `hsl(${hue + 20},50%,18%)`;
-  const fs = Math.round(Math.min(w, h) * 0.38);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-    <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${c1}"/><stop offset="100%" stop-color="${c2}"/></linearGradient></defs>
-    <rect width="${w}" height="${h}" fill="url(#g)"/>
-    <text x="${w/2}" y="${h/2 + fs*0.35}" text-anchor="middle" font-size="${fs}" opacity="0.45">${icon}</text>
-  </svg>`;
-  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+function kindGradient(kinds) {
+  const k = (kinds || '').toLowerCase();
+  if (k.includes('museum')) return 'linear-gradient(135deg, #2d3a4a, #4a5a7a)';
+  if (k.includes('religious') || k.includes('church') || k.includes('mosque') || k.includes('synagog') || k.includes('sacred')) return 'linear-gradient(135deg, #4a2d4a, #7a4a7a)';
+  if (k.includes('castle') || k.includes('palace') || k.includes('fortif')) return 'linear-gradient(135deg, #4a3a2d, #7a5a4a)';
+  if (k.includes('landmark') || k.includes('historic') || k.includes('architecture')) return 'linear-gradient(135deg, #2d4a2d, #4a7a4a)';
+  return 'linear-gradient(135deg, #3a3a2d, #6a6a4a)';
 }
 
 function formatKind(kinds) {
@@ -1014,9 +1011,25 @@ async function fetchPOIs(lat, lon, kinds, limit = 20, radius = 5000) {
 }
 
 async function fetchPOIDetail(xid) {
-  const r = await fetch(`https://api.opentripmap.com/0.1/en/places/xid/${xid}?apikey=${CONFIG.OPENTRIPMAP_KEY}`);
-  if (!r.ok) return null;
-  return r.json();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const r = await fetch(`https://api.opentripmap.com/0.1/en/places/xid/${xid}?apikey=${CONFIG.OPENTRIPMAP_KEY}`);
+    if (r.status === 429) {
+      await new Promise(res => setTimeout(res, 1000 * (attempt + 1)));
+      continue;
+    }
+    if (!r.ok) return null;
+    return r.json();
+  }
+  return null;
+}
+
+async function fetchPOIDetailsSequential(xids) {
+  const results = [];
+  for (const xid of xids) {
+    results.push(await fetchPOIDetail(xid));
+    await new Promise(res => setTimeout(res, 200));
+  }
+  return results;
 }
 
 // ── PHOTO CHAIN ──────────────────────────────────────────────────────────────
@@ -1052,6 +1065,8 @@ async function _unsplashPhoto(query) {
   } catch { return null; }
 }
 
+const WIKI_WORTHY = ['castle', 'palace', 'fortif', 'museum', 'religious', 'church', 'mosque', 'synagog', 'sacred', 'natural', 'historic'];
+
 // Main photo resolver — detail is the already-fetched OTM detail object
 async function getPlacePhoto(name, city, kinds, detail) {
   const tag = `[Photo "${name}"]`;
@@ -1060,13 +1075,16 @@ async function getPlacePhoto(name, city, kinds, detail) {
   const otm = detail?.preview?.source;
   if (otm) { console.log(`${tag} ✅ OTM preview`); return otm; }
 
-  // Step 2: Wikipedia REST summary
-  let url = await _wikiSummaryPhoto(name);
-  if (url) { console.log(`${tag} ✅ Wikipedia summary`); return url; }
-
-  // Step 3: Wikimedia page images
-  url = await _wikimediaSearchPhoto(name);
-  if (url) { console.log(`${tag} ✅ Wikimedia search`); return url; }
+  // Step 2 & 3: Wikipedia — only for cultural/historic categories, skip bars/restaurants/shops etc.
+  const k = (kinds || '').toLowerCase();
+  if (WIKI_WORTHY.some(w => k.includes(w))) {
+    let url = await _wikiSummaryPhoto(name);
+    if (url) { console.log(`${tag} ✅ Wikipedia summary`); return url; }
+    url = await _wikimediaSearchPhoto(name);
+    if (url) { console.log(`${tag} ✅ Wikimedia search`); return url; }
+  } else {
+    console.log(`${tag} ⏭ skipping Wikipedia (category: ${k.split(',')[0]})`);
+  }
 
   // Step 4a: Unsplash — name + city
   const q1 = `${name} ${city}`;
@@ -1090,18 +1108,24 @@ async function getPlacePhoto(name, city, kinds, detail) {
 
 // Apply a resolved photo URL to all DOM img elements with matching data-photo-xid
 function applyPhotoToDOM(xid, url, hue, kinds) {
+  const grad = kindGradient(kinds);
   document.querySelectorAll(`[data-photo-xid="${xid}"]`).forEach(img => {
-    const w = parseInt(img.dataset.pw) || 200;
-    const h = parseInt(img.dataset.ph) || 140;
     if (url) {
       img.addEventListener('load', () => {
+        if (img.src.startsWith('data:')) return;
+        img.style.background = '';
         img.classList.remove('photo-skeleton');
         img.classList.add('photo-fadein');
       }, { once: true });
-      img.onerror = () => { img.src = placeholderImg(hue || 35, w, h, kindIcon(kinds)); img.classList.remove('photo-skeleton'); };
+      img.onerror = () => {
+        img.src = TRANSPARENT_GIF;
+        img.style.background = grad;
+        img.classList.remove('photo-skeleton');
+      };
       img.src = url;
     } else {
-      img.src = placeholderImg(hue || 35, w, h, kindIcon(kinds));
+      img.src = TRANSPARENT_GIF;
+      img.style.background = grad;
       img.classList.remove('photo-skeleton');
     }
   });
@@ -1149,11 +1173,12 @@ async function doSearch(query) {
     const topDeduped = dedupe(topRaw).slice(0, 10);
     const hiddenDeduped = dedupe(hiddenRaw).slice(0, 10);
 
-    // Fetch OTM details for all places in parallel (no photos yet)
-    const [topDetails, hiddenDetails] = await Promise.all([
-      Promise.all(topDeduped.map(p => fetchPOIDetail(p.xid))),
-      Promise.all(hiddenDeduped.map(p => fetchPOIDetail(p.xid))),
-    ]);
+    // Fetch OTM details sequentially to avoid 429 rate limits (200ms gap, 3-retry on 429)
+    const allDetails = await fetchPOIDetailsSequential(
+      [...topDeduped, ...hiddenDeduped].map(p => p.xid)
+    );
+    const topDetails = allDetails.slice(0, topDeduped.length);
+    const hiddenDetails = allDetails.slice(topDeduped.length);
 
     state.topPlaces = topDeduped.map((p, i) => ({ ...p, ...(topDetails[i] || {}), img: null, hue: HUES[i % HUES.length] }));
     state.hiddenPlaces = hiddenDeduped.map((p, i) => ({ ...p, ...(hiddenDetails[i] || {}), img: null, hue: HUES[(i + 5) % HUES.length] }));
@@ -1234,40 +1259,38 @@ function renderTopSection() {
 }
 
 function topCardHTML(p, i) {
-  const icon = kindIcon(p.kinds);
   const tag = topTag(p);
-  const imgAttrs = p.img
-    ? `src="${esc(p.img)}" onerror="this.src='${placeholderImg(p.hue||35,200,140,icon)}'"`
-    : `src="${TRANSPARENT_GIF}" class="top-card-img photo-skeleton" data-pw="200" data-ph="140"`;
-  const imgClass = p.img ? 'top-card-img' : 'top-card-img photo-skeleton';
+  const grad = kindGradient(p.kinds);
+  const style = p.img ? '' : ` style="background:${grad}"`;
+  const onerr = p.img ? ` onerror="this.src='${TRANSPARENT_GIF}';this.style.background='${grad}'"` : '';
   return `
     <div class="top-card" data-xid="${esc(p.xid)}" data-kind="top">
       <img class="${p.img ? 'top-card-img' : 'top-card-img photo-skeleton'}" data-photo-xid="${esc(p.xid)}" data-pw="200" data-ph="140"
-        src="${p.img ? esc(p.img) : TRANSPARENT_GIF}" alt="${esc(p.name)}"
-        ${p.img ? `onerror="this.src='${placeholderImg(p.hue||35,200,140,icon)}'"` : ''}>
+        src="${p.img ? esc(p.img) : TRANSPARENT_GIF}" alt="${esc(p.name)}"${style}${onerr}>
       <div class="top-card-body">
         <div class="top-card-rank">#${i+1} of 10</div>
         <div class="top-card-name">${esc(p.name)}</div>
         <div class="top-card-tags">
           <span class="tag">${esc(tag)}</span>
-          ${p.dist ? `<span class="tag green">${esc(formatDist(p.dist))}</span>` : ''}
+          ${p.dist && p.dist >= 10 && p.dist < 500000 ? `<span class="tag green">${esc(formatDist(p.dist))}</span>` : ''}
         </div>
       </div>
     </div>`;
 }
 
 function listRowHTML(p, i, kind = 'top') {
-  const icon = kindIcon(p.kinds);
   const tag = kind === 'hidden' ? hiddenTag(p).replace(/^.\s/,'') : topTag(p);
+  const grad = kindGradient(p.kinds);
+  const style = p.img ? '' : ` style="background:${grad}"`;
+  const onerr = p.img ? ` onerror="this.src='${TRANSPARENT_GIF}';this.style.background='${grad}'"` : '';
   return `
     <div class="place-row" data-xid="${esc(p.xid)}" data-kind="${kind}">
       <img class="${p.img ? 'place-row-img' : 'place-row-img photo-skeleton'}" data-photo-xid="${esc(p.xid)}" data-pw="56" data-ph="56"
-        src="${p.img ? esc(p.img) : TRANSPARENT_GIF}" alt="${esc(p.name)}"
-        ${p.img ? `onerror="this.src='${placeholderImg(p.hue||35,56,56,icon)}'"` : ''}>
+        src="${p.img ? esc(p.img) : TRANSPARENT_GIF}" alt="${esc(p.name)}"${style}${onerr}>
       <div class="place-row-info">
         <div class="place-row-name">${esc(p.name)}</div>
         <div class="place-row-sub">${esc(tag)}</div>
-        ${p.dist ? `<div class="place-row-dist">${esc(formatDist(p.dist))}</div>` : ''}
+        ${p.dist && p.dist >= 10 && p.dist < 500000 ? `<div class="place-row-dist">${esc(formatDist(p.dist))}</div>` : ''}
       </div>
       <span class="place-row-arrow">›</span>
     </div>`;
@@ -1292,13 +1315,14 @@ function renderHiddenSection() {
 }
 
 function hiddenCardHTML(p) {
-  const icon = kindIcon(p.kinds);
   const tag = hiddenTag(p);
+  const grad = kindGradient(p.kinds);
+  const style = p.img ? '' : ` style="background:${grad}"`;
+  const onerr = p.img ? ` onerror="this.src='${TRANSPARENT_GIF}';this.style.background='${grad}'"` : '';
   return `
     <div class="hidden-card" data-xid="${esc(p.xid)}" data-kind="hidden">
       <img class="${p.img ? '' : 'photo-skeleton'}" data-photo-xid="${esc(p.xid)}" data-pw="160" data-ph="213"
-        src="${p.img ? esc(p.img) : TRANSPARENT_GIF}" alt="${esc(p.name)}"
-        ${p.img ? `onerror="this.src='${placeholderImg(p.hue||170,160,213,icon)}'"` : ''}>
+        src="${p.img ? esc(p.img) : TRANSPARENT_GIF}" alt="${esc(p.name)}"${style}${onerr}>
       <div class="hidden-card-overlay">
         <div class="hidden-card-name">${esc(p.name)}</div>
         <div class="hidden-card-tag">${esc(tag)}</div>
@@ -1357,8 +1381,9 @@ function renderDetail(p, kind) {
   heroImg.dataset.ph = '260';
   if (p.img) {
     heroImg.classList.remove('photo-skeleton');
+    heroImg.style.background = '';
     heroImg.src = p.img;
-    heroImg.onerror = () => { heroImg.src = placeholderImg(p.hue||35,393,260,_icon); };
+    heroImg.onerror = () => { heroImg.src = TRANSPARENT_GIF; heroImg.style.background = kindGradient(p.kinds); };
   } else {
     heroImg.classList.add('photo-skeleton');
     heroImg.src = TRANSPARENT_GIF;
@@ -1373,10 +1398,10 @@ function renderDetail(p, kind) {
   saveBtn.textContent = saved ? '♥' : '♡';
   saveBtn.classList.toggle('saved', saved);
 
-  // Pills
+  // Pills — hide distance if missing or implausible (> 500 km)
   const pills = [];
-  if (p.dist) pills.push(`🚶 ${estimateTime(p.dist)}`);
-  if (p.dist) pills.push(`📏 ${formatDist(p.dist)}`);
+  if (p.dist && p.dist >= 10 && p.dist < 500000) pills.push(`🚶 ${estimateTime(p.dist)}`);
+  if (p.dist && p.dist >= 10 && p.dist < 500000) pills.push(`📏 ${formatDist(p.dist)}`);
   if (p.point?.lat) pills.push(`📍 ${p.point.lat.toFixed(3)}, ${p.point.lon.toFixed(3)}`);
   document.getElementById('detailPills').innerHTML = pills.map(t => `<div class="detail-pill">${esc(t)}</div>`).join('');
 
@@ -1496,7 +1521,7 @@ function renderRecents() {
   el.innerHTML = state.recents.map(r => `
     <div class="recent-item" onclick="doSearch('${esc(r.name)}')">
       <div class="recent-thumb">
-        <img src="${placeholderImg(r.hue || 35, 48, 48)}" alt="">
+        <img src="${TRANSPARENT_GIF}" style="background:linear-gradient(135deg,hsl(${r.hue||35},40%,30%),hsl(${(r.hue||35)+20},50%,20%));display:block;width:100%;height:100%;border-radius:inherit" alt="">
       </div>
       <div class="recent-info">
         <div class="recent-name">${esc(r.name)}</div>

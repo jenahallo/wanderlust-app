@@ -1045,7 +1045,7 @@ async function _wikimediaSearchPhoto(name) {
 
 async function _unsplashPhoto(query) {
   try {
-    const r = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape&client_id=${CONFIG.UNSPLASH_KEY}`);
+    const r = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape`, { headers: { Authorization: `Client-ID ${CONFIG.UNSPLASH_KEY}` } });
     if (!r.ok) return null;
     const d = await r.json();
     return d.results?.[0]?.urls?.regular || null;

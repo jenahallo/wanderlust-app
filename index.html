@@ -455,6 +455,9 @@
   /* Loading skeleton */
   .skeleton { background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 10px; }
   @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .photo-skeleton { background: linear-gradient(90deg, #d1d5db 25%, #e9ebee 50%, #d1d5db 75%) !important; background-size: 200% 100% !important; animation: shimmer 1.4s ease-in-out infinite !important; }
+  @keyframes photo-fadein { from { opacity: 0; } to { opacity: 1; } }
+  .photo-fadein { animation: photo-fadein 0.45s ease forwards; }
 
   /* ── DETAIL SCREEN ── */
   #detail { background: var(--surface); }
@@ -1017,7 +1020,8 @@ async function fetchPOIDetail(xid) {
 }
 
 // ── PHOTO CHAIN ──────────────────────────────────────────────────────────────
-// Step 2: Wikipedia REST summary
+const TRANSPARENT_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
 async function _wikiSummaryPhoto(name) {
   try {
     const slug = encodeURIComponent(name.trim().replace(/\s+/g, '_'));
@@ -1028,7 +1032,6 @@ async function _wikiSummaryPhoto(name) {
   } catch { return null; }
 }
 
-// Step 3: Wikimedia page images API
 async function _wikimediaSearchPhoto(name) {
   try {
     const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(name)}&prop=pageimages&format=json&pithumbsize=400&origin=*`;
@@ -1040,28 +1043,68 @@ async function _wikimediaSearchPhoto(name) {
   } catch { return null; }
 }
 
+async function _unsplashPhoto(query) {
+  try {
+    const r = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape&client_id=${CONFIG.UNSPLASH_KEY}`);
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.results?.[0]?.urls?.regular || null;
+  } catch { return null; }
+}
+
 // Main photo resolver — detail is the already-fetched OTM detail object
 async function getPlacePhoto(name, city, kinds, detail) {
   const tag = `[Photo "${name}"]`;
 
   // Step 1: OTM detail → preview.source
   const otm = detail?.preview?.source;
-  if (otm) { console.log(`${tag} ✅ Step 1 OTM preview: ${otm}`); return otm; }
-  console.log(`${tag} ❌ Step 1 no OTM preview`);
+  if (otm) { console.log(`${tag} ✅ OTM preview`); return otm; }
 
   // Step 2: Wikipedia REST summary
   let url = await _wikiSummaryPhoto(name);
-  if (url) { console.log(`${tag} ✅ Step 2 Wikipedia summary: ${url}`); return url; }
-  console.log(`${tag} ❌ Step 2 no Wikipedia summary`);
+  if (url) { console.log(`${tag} ✅ Wikipedia summary`); return url; }
 
   // Step 3: Wikimedia page images
   url = await _wikimediaSearchPhoto(name);
-  if (url) { console.log(`${tag} ✅ Step 3 Wikimedia search: ${url}`); return url; }
-  console.log(`${tag} ❌ Step 3 no Wikimedia result`);
+  if (url) { console.log(`${tag} ✅ Wikimedia search`); return url; }
 
-  // Step 4: gradient placeholder (null → caller uses placeholderImg)
-  console.log(`${tag} 🎨 Step 4 gradient fallback`);
+  // Step 4a: Unsplash — name + city
+  const q1 = `${name} ${city}`;
+  url = await _unsplashPhoto(q1);
+  if (url) { console.log(`${tag} ✅ Unsplash tier 1 "${q1}"`); return url; }
+
+  // Step 4b: Unsplash — city + landmark
+  const q2 = `${city} landmark`;
+  url = await _unsplashPhoto(q2);
+  if (url) { console.log(`${tag} ✅ Unsplash tier 2 "${q2}"`); return url; }
+
+  // Step 4c: Unsplash — city + travel
+  const q3 = `${city} travel`;
+  url = await _unsplashPhoto(q3);
+  if (url) { console.log(`${tag} ✅ Unsplash tier 3 "${q3}"`); return url; }
+
+  // Step 5: gradient fallback
+  console.log(`${tag} 🎨 gradient fallback`);
   return null;
+}
+
+// Apply a resolved photo URL to all DOM img elements with matching data-photo-xid
+function applyPhotoToDOM(xid, url, hue, kinds) {
+  document.querySelectorAll(`[data-photo-xid="${xid}"]`).forEach(img => {
+    const w = parseInt(img.dataset.pw) || 200;
+    const h = parseInt(img.dataset.ph) || 140;
+    if (url) {
+      img.addEventListener('load', () => {
+        img.classList.remove('photo-skeleton');
+        img.classList.add('photo-fadein');
+      }, { once: true });
+      img.onerror = () => { img.src = placeholderImg(hue || 35, w, h, kindIcon(kinds)); img.classList.remove('photo-skeleton'); };
+      img.src = url;
+    } else {
+      img.src = placeholderImg(hue || 35, w, h, kindIcon(kinds));
+      img.classList.remove('photo-skeleton');
+    }
+  });
 }
 
 async function fetchWeather(lat, lon) {
@@ -1103,20 +1146,17 @@ async function doSearch(query) {
       });
     };
 
-    const enrichTop = await Promise.all(dedupe(topRaw).slice(0, 10).map(async (p, i) => {
-      const detail = await fetchPOIDetail(p.xid);
-      const imgUrl = await getPlacePhoto(p.name, state.destination, p.kinds, detail);
-      return { ...p, ...(detail || {}), img: imgUrl, hue: HUES[i % HUES.length] };
-    }));
+    const topDeduped = dedupe(topRaw).slice(0, 10);
+    const hiddenDeduped = dedupe(hiddenRaw).slice(0, 10);
 
-    const enrichHidden = await Promise.all(dedupe(hiddenRaw).slice(0, 10).map(async (p, i) => {
-      const detail = await fetchPOIDetail(p.xid);
-      const imgUrl = await getPlacePhoto(p.name, state.destination, p.kinds, detail);
-      return { ...p, ...(detail || {}), img: imgUrl, hue: HUES[(i + 5) % HUES.length] };
-    }));
+    // Fetch OTM details for all places in parallel (no photos yet)
+    const [topDetails, hiddenDetails] = await Promise.all([
+      Promise.all(topDeduped.map(p => fetchPOIDetail(p.xid))),
+      Promise.all(hiddenDeduped.map(p => fetchPOIDetail(p.xid))),
+    ]);
 
-    state.topPlaces = enrichTop;
-    state.hiddenPlaces = enrichHidden;
+    state.topPlaces = topDeduped.map((p, i) => ({ ...p, ...(topDetails[i] || {}), img: null, hue: HUES[i % HUES.length] }));
+    state.hiddenPlaces = hiddenDeduped.map((p, i) => ({ ...p, ...(hiddenDetails[i] || {}), img: null, hue: HUES[(i + 5) % HUES.length] }));
 
   } catch {
     state.destination = query;
@@ -1142,6 +1182,14 @@ async function doSearch(query) {
   document.getElementById('tabTop').classList.add('active');
   document.getElementById('tabHidden').classList.remove('active');
   renderResultsTab();
+
+  // Preload all photos in parallel — update DOM as each resolves
+  [...state.topPlaces, ...state.hiddenPlaces].forEach(p => {
+    getPlacePhoto(p.name, state.destination, p.kinds, p).then(url => {
+      p.img = url;
+      applyPhotoToDOM(p.xid, url, p.hue, p.kinds);
+    });
+  });
 
   // Weather (no API key needed)
   fetchWeather(state.coords.lat, state.coords.lon).then(w => {
@@ -1187,11 +1235,16 @@ function renderTopSection() {
 
 function topCardHTML(p, i) {
   const icon = kindIcon(p.kinds);
-  const imgSrc = p.img || placeholderImg(p.hue || 35, 200, 140, icon);
   const tag = topTag(p);
+  const imgAttrs = p.img
+    ? `src="${esc(p.img)}" onerror="this.src='${placeholderImg(p.hue||35,200,140,icon)}'"`
+    : `src="${TRANSPARENT_GIF}" class="top-card-img photo-skeleton" data-pw="200" data-ph="140"`;
+  const imgClass = p.img ? 'top-card-img' : 'top-card-img photo-skeleton';
   return `
     <div class="top-card" data-xid="${esc(p.xid)}" data-kind="top">
-      <img class="top-card-img" src="${imgSrc}" alt="${esc(p.name)}" onerror="this.src='${placeholderImg(p.hue||35,200,140,icon)}'">
+      <img class="${p.img ? 'top-card-img' : 'top-card-img photo-skeleton'}" data-photo-xid="${esc(p.xid)}" data-pw="200" data-ph="140"
+        src="${p.img ? esc(p.img) : TRANSPARENT_GIF}" alt="${esc(p.name)}"
+        ${p.img ? `onerror="this.src='${placeholderImg(p.hue||35,200,140,icon)}'"` : ''}>
       <div class="top-card-body">
         <div class="top-card-rank">#${i+1} of 10</div>
         <div class="top-card-name">${esc(p.name)}</div>
@@ -1205,11 +1258,12 @@ function topCardHTML(p, i) {
 
 function listRowHTML(p, i, kind = 'top') {
   const icon = kindIcon(p.kinds);
-  const imgSrc = p.img || placeholderImg(p.hue || 35, 56, 56, icon);
   const tag = kind === 'hidden' ? hiddenTag(p).replace(/^.\s/,'') : topTag(p);
   return `
     <div class="place-row" data-xid="${esc(p.xid)}" data-kind="${kind}">
-      <img class="place-row-img" src="${imgSrc}" alt="${esc(p.name)}" onerror="this.src='${placeholderImg(p.hue||35,56,56,icon)}'">
+      <img class="${p.img ? 'place-row-img' : 'place-row-img photo-skeleton'}" data-photo-xid="${esc(p.xid)}" data-pw="56" data-ph="56"
+        src="${p.img ? esc(p.img) : TRANSPARENT_GIF}" alt="${esc(p.name)}"
+        ${p.img ? `onerror="this.src='${placeholderImg(p.hue||35,56,56,icon)}'"` : ''}>
       <div class="place-row-info">
         <div class="place-row-name">${esc(p.name)}</div>
         <div class="place-row-sub">${esc(tag)}</div>
@@ -1239,11 +1293,12 @@ function renderHiddenSection() {
 
 function hiddenCardHTML(p) {
   const icon = kindIcon(p.kinds);
-  const imgSrc = p.img || placeholderImg(p.hue || 170, 160, 213, icon);
   const tag = hiddenTag(p);
   return `
     <div class="hidden-card" data-xid="${esc(p.xid)}" data-kind="hidden">
-      <img src="${imgSrc}" alt="${esc(p.name)}" onerror="this.src='${placeholderImg(p.hue||170,160,213,icon)}'">
+      <img class="${p.img ? '' : 'photo-skeleton'}" data-photo-xid="${esc(p.xid)}" data-pw="160" data-ph="213"
+        src="${p.img ? esc(p.img) : TRANSPARENT_GIF}" alt="${esc(p.name)}"
+        ${p.img ? `onerror="this.src='${placeholderImg(p.hue||170,160,213,icon)}'"` : ''}>
       <div class="hidden-card-overlay">
         <div class="hidden-card-name">${esc(p.name)}</div>
         <div class="hidden-card-tag">${esc(tag)}</div>
@@ -1296,14 +1351,18 @@ function openDetail(xid, kind) {
 function renderDetail(p, kind) {
   kind = kind || state.activeKind;
   const _icon = kindIcon(p.kinds);
-  const imgSrc = p.img || placeholderImg(p.hue || 35, 393, 260, _icon);
-  document.getElementById('detailHeroImg').src = imgSrc;
-  document.getElementById('detailHeroImg').onerror = function() { this.src = placeholderImg(p.hue||35,393,260,_icon); };
-  // If no photo was fetched during search, try on demand now (p already has detail merged in)
-  if (!p.img) {
-    getPlacePhoto(p.name, state.destination, p.kinds, p).then(url => {
-      if (url) { p.img = url; document.getElementById('detailHeroImg').src = url; }
-    });
+  const heroImg = document.getElementById('detailHeroImg');
+  heroImg.dataset.photoXid = p.xid;
+  heroImg.dataset.pw = '393';
+  heroImg.dataset.ph = '260';
+  if (p.img) {
+    heroImg.classList.remove('photo-skeleton');
+    heroImg.src = p.img;
+    heroImg.onerror = () => { heroImg.src = placeholderImg(p.hue||35,393,260,_icon); };
+  } else {
+    heroImg.classList.add('photo-skeleton');
+    heroImg.src = TRANSPARENT_GIF;
+    heroImg.setAttribute('data-photo-xid', p.xid);
   }
   document.getElementById('detailName').textContent = p.name || '';
   document.getElementById('detailBadge').textContent = kind === 'hidden' ? hiddenTag(p).replace(/^.\s/,'') : topTag(p);

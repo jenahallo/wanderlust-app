@@ -1060,6 +1060,30 @@ async function fetchPOIDetailsSequential(xids) {
 // ── PHOTO CHAIN ──────────────────────────────────────────────────────────────
 const TRANSPARENT_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
+// Wikipedia semaphore — max 2 concurrent requests to avoid 429
+const _wikiSem = { count: 0, max: 2, queue: [] };
+function _wikiAcquire() {
+  return new Promise(resolve => {
+    if (_wikiSem.count < _wikiSem.max) { _wikiSem.count++; resolve(); }
+    else _wikiSem.queue.push(resolve);
+  });
+}
+function _wikiRelease() {
+  if (_wikiSem.queue.length) _wikiSem.queue.shift()();
+  else _wikiSem.count--;
+}
+
+// Generic descriptive words that never have their own Wikipedia article
+const WIKI_GENERIC = new Set(['grave','wayside','cross','shrine','chapel','stone',
+  'memorial','allegory','stolperstein','monument','statue','well','fountain',
+  'plaque','tombstone','pillar','column','sign','marker','inscription']);
+
+function _isWikiSearchable(name) {
+  if (!name || name.length <= 6) return false;
+  const words = name.toLowerCase().split(/\s+/);
+  return !words.some(w => WIKI_GENERIC.has(w));
+}
+
 async function _wikiSummaryPhoto(name) {
   try {
     const slug = encodeURIComponent(name.trim().replace(/\s+/g, '_'));
@@ -1120,20 +1144,27 @@ async function getPlacePhoto(name, city, kinds, detail) {
   const otm = detail?.preview?.source;
   if (otm) { console.log(`${tag} ✅ T1 OTM`); return otm; }
 
-  // T2: Wikipedia — only wiki-worthy categories
+  // T2: Wikipedia — only wiki-worthy categories AND proper-noun names
   const k = (kinds || '').toLowerCase();
-  if (WIKI_WORTHY.some(w => k.includes(w))) {
-    url = await _wikiSummaryPhoto(name);
-    if (url) { console.log(`${tag} ✅ T2 Wikipedia summary`); return url; }
-    url = await _wikimediaSearchPhoto(name);
-    if (url) { console.log(`${tag} ✅ T2 Wikimedia search`); return url; }
+  if (WIKI_WORTHY.some(w => k.includes(w)) && _isWikiSearchable(name)) {
+    await _wikiAcquire();
+    try {
+      url = await _wikiSummaryPhoto(name);
+      if (url) { console.log(`${tag} ✅ T2 Wikipedia summary`); return url; }
+      url = await _wikimediaSearchPhoto(name);
+      if (url) { console.log(`${tag} ✅ T2 Wikimedia search`); return url; }
+    } finally {
+      _wikiRelease();
+    }
   }
 
-  // T3: Unsplash — simplified name (last 2 meaningful words) + city
+  // T3: Unsplash — simplified name + city (skip if simplified is empty / too short)
   const simplified = simplifyName(name);
-  const q3 = `${simplified} ${city}`;
-  url = await _unsplashPhoto(q3);
-  if (url) { console.log(`${tag} ✅ T3 Unsplash "${q3}"`); return url; }
+  if (simplified && simplified.trim().length >= 3) {
+    const q3 = `${simplified} ${city}`;
+    url = await _unsplashPhoto(q3);
+    if (url) { console.log(`${tag} ✅ T3 Unsplash "${q3}"`); return url; }
+  }
 
   // T4: Unsplash — city + category keyword
   const catWord = kindSearchWord(kinds);

@@ -1063,36 +1063,50 @@ const TRANSPARENT_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAA
 async function _wikiSummaryPhoto(name) {
   try {
     const slug = encodeURIComponent(name.trim().replace(/\s+/g, '_'));
-    const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${slug}`, { headers: { Accept: 'application/json' } });
-    if (!r.ok) return null;
-    const d = await r.json();
-    return d.thumbnail?.source || d.originalimage?.source || null;
+    for (const lang of ['en', 'cs']) {
+      const r = await fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${slug}`, { headers: { Accept: 'application/json' } });
+      if (!r.ok) continue;
+      const d = await r.json();
+      const img = d.thumbnail?.source || d.originalimage?.source;
+      if (img) return img;
+    }
+    return null;
   } catch { return null; }
 }
 
 async function _wikimediaSearchPhoto(name) {
   try {
-    const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(name)}&prop=pageimages&format=json&pithumbsize=400&origin=*`;
-    const r = await fetch(url);
-    if (!r.ok) return null;
-    const d = await r.json();
-    const page = Object.values(d?.query?.pages || {})[0];
-    return page?.thumbnail?.source || null;
+    for (const lang of ['en', 'cs']) {
+      const url = `https://${lang}.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(name)}&prop=pageimages&format=json&pithumbsize=400&origin=*`;
+      const r = await fetch(url);
+      if (!r.ok) continue;
+      const d = await r.json();
+      const page = Object.values(d?.query?.pages || {})[0];
+      if (page?.thumbnail?.source) return page.thumbnail.source;
+    }
+    return null;
   } catch { return null; }
 }
 
 const _unsplashCache = new Map();
-async function _unsplashPhoto(query) {
+function _unsplashPhoto(query) {
   const key = query.toLowerCase();
   if (_unsplashCache.has(key)) return _unsplashCache.get(key);
-  try {
-    const r = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape`, { headers: { Authorization: `Client-ID ${CONFIG.UNSPLASH_KEY}` } });
-    if (!r.ok) return null;
-    const d = await r.json();
-    const url = d.results?.[0]?.urls?.regular || null;
-    _unsplashCache.set(key, url);
-    return url;
-  } catch { return null; }
+  // Store the promise immediately so concurrent calls share one in-flight request
+  const promise = (async () => {
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const r = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape`, { headers: { Authorization: `Client-ID ${CONFIG.UNSPLASH_KEY}` } });
+        if (r.status === 429) { await new Promise(res => setTimeout(res, 1000 * (attempt + 1))); continue; }
+        if (!r.ok) return null;
+        const d = await r.json();
+        return d.results?.[0]?.urls?.regular || null;
+      }
+      return null;
+    } catch { return null; }
+  })();
+  _unsplashCache.set(key, promise);
+  return promise;
 }
 
 const WIKI_WORTHY = ['castle', 'palace', 'fortif', 'museum', 'religious', 'church', 'mosque', 'synagog', 'sacred', 'natural', 'historic'];
@@ -1307,7 +1321,7 @@ function topCardHTML(p, i) {
         <div class="top-card-name">${esc(truncName(p.name))}</div>
         <div class="top-card-tags">
           <span class="tag">${esc(tag)}</span>
-          ${p.dist && p.dist >= 10 && p.dist < 500000 ? `<span class="tag green">${esc(formatDist(p.dist))}</span>` : ''}
+          ${p.dist && p.dist >= 10 && p.dist < 100000 ? `<span class="tag green">${esc(formatDist(p.dist))}</span>` : ''}
         </div>
       </div>
     </div>`;
@@ -1325,7 +1339,7 @@ function listRowHTML(p, i, kind = 'top') {
       <div class="place-row-info">
         <div class="place-row-name">${esc(truncName(p.name))}</div>
         <div class="place-row-sub">${esc(tag)}</div>
-        ${p.dist && p.dist >= 10 && p.dist < 500000 ? `<div class="place-row-dist">${esc(formatDist(p.dist))}</div>` : ''}
+        ${p.dist && p.dist >= 10 && p.dist < 100000 ? `<div class="place-row-dist">${esc(formatDist(p.dist))}</div>` : ''}
       </div>
       <span class="place-row-arrow">›</span>
     </div>`;
@@ -1435,8 +1449,8 @@ function renderDetail(p, kind) {
 
   // Pills — hide distance if missing or implausible (> 500 km)
   const pills = [];
-  if (p.dist && p.dist >= 10 && p.dist < 500000) pills.push(`🚶 ${estimateTime(p.dist)}`);
-  if (p.dist && p.dist >= 10 && p.dist < 500000) pills.push(`📏 ${formatDist(p.dist)}`);
+  if (p.dist && p.dist >= 10 && p.dist < 100000) pills.push(`🚶 ${estimateTime(p.dist)}`);
+  if (p.dist && p.dist >= 10 && p.dist < 100000) pills.push(`📏 ${formatDist(p.dist)}`);
   if (p.point?.lat) pills.push(`📍 ${p.point.lat.toFixed(3)}, ${p.point.lon.toFixed(3)}`);
   document.getElementById('detailPills').innerHTML = pills.map(t => `<div class="detail-pill">${esc(t)}</div>`).join('');
 

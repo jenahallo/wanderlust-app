@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wanderlust-v7';
+const CACHE_NAME = 'wanderlust-v8';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
